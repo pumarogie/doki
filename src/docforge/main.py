@@ -15,7 +15,6 @@ log = logging.getLogger("docforge")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.pool.open()
-    db.migrate()
     yield
     db.pool.close()
 

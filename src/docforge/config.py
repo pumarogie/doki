@@ -13,7 +13,7 @@ class Settings:
 
 def load() -> Settings:
     return Settings(
-        database_url=os.environ.get("DATABASE_URL", "postgresql://localhost/docforge"),
+        database_url=os.environ.get("DATABASE_URL", "postgresql://docforge_app@localhost/docforge"),
         storage_dir=Path(os.environ.get("STORAGE_DIR", "./data/files")),
         max_upload_bytes=int(os.environ.get("MAX_UPLOAD_BYTES", 50 * 1024 * 1024)),
         llm_provider=os.environ.get("LLM_PROVIDER", "mock"),
