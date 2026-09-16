@@ -2,12 +2,13 @@ import logging
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse, Response
 
 from docforge import db
 from docforge.auth import Principal, any_key
-from docforge.products import einvoice, pdfa, render
+from docforge.core import jobs, storage
+from docforge.products import einvoice, extract, pdfa, render
 
 log = logging.getLogger("docforge")
 
@@ -23,6 +24,7 @@ app = FastAPI(title="docforge", lifespan=lifespan)
 app.include_router(pdfa.router)
 app.include_router(einvoice.router)
 app.include_router(render.router)
+app.include_router(extract.router)
 
 
 @app.exception_handler(Exception)
@@ -38,6 +40,24 @@ def health():
     with db.connect() as conn:
         conn.execute("SELECT 1")
     return {"status": "ok"}
+
+
+@app.get("/v1/jobs/{job_id}")
+def get_job(job_id: int, principal: Principal = Depends(any_key)):
+    job = jobs.get(job_id, principal.organization_id)
+    if job is None:
+        raise HTTPException(404, "job not found")
+    return job
+
+
+@app.get("/v1/files/{file_id}", response_class=Response)
+def get_file(file_id: int, principal: Principal = Depends(any_key)):
+    found = storage.get(file_id, principal.organization_id)
+    if found is None:
+        raise HTTPException(404, "file not found")
+    meta, data = found
+    return Response(data, media_type=meta["content_type"],
+                    headers={"Content-Disposition": f'attachment; filename="file-{meta["id"]}"'})
 
 
 @app.get("/v1/usage")
