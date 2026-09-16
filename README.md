@@ -10,7 +10,13 @@ One document engine, several PDF products behind one API key system:
 | `extract` | `POST /v1/extract` → job; fields with `value`, `confidence`, `source_page`, `uncertain_fields` |
 | `reports` | `/v1/schedules` CRUD, `POST /v1/schedules/{id}/run`; cron + timezone, email or pinned-key SFTP delivery |
 
-Shared: `GET /v1/jobs/{id}`, `GET /v1/files/{id}`, `GET /v1/usage`. Keys are scoped per product.
+Shared: `GET /v1/jobs/{id}`, `GET /v1/files/{id}`, `GET /v1/usage`. Keys are scoped per product and carry
+limits: requests per minute (429 + `Retry-After`) and an optional monthly page quota (402).
+
+```sh
+docforge create-key --org acme --products pdfa,render --rate-per-minute 120 --monthly-pages 5000
+docforge revoke-key --prefix <prefix>        # the part after df_ in the key
+```
 
 ## Run with Docker
 
@@ -42,6 +48,19 @@ uv run python -m docforge.worker             # jobs + schedules
 
 Database roles: migrations run as `docforge_owner`; the app connects as `docforge_app` (DML only).
 See `docker/initdb.sh` for the grants.
+
+## CI
+
+`.github/workflows/ci.yml` runs ruff + pyright, then builds `docker build --target test` (the runtime image plus
+dev dependencies and tests) and runs pytest against a Postgres service prepared by `docker/initdb.sh`
+(`DOCFORGE_DB=docforge_test`). Reproduce locally:
+
+```sh
+docker build --target test -t docforge:test .
+# start postgres:17, run docker/initdb.sh against it, then:
+docker run --rm -e DATABASE_URL=postgresql://docforge_app:…@host/docforge_test \
+  -e TEST_OWNER_DATABASE_URL=postgresql://docforge_owner:…@host/docforge_test docforge:test
+```
 
 ## Adding a product
 

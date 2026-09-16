@@ -12,6 +12,10 @@ uv run pytest -q                  # needs local Postgres, gs, verapdf, java+KoSI
 docker compose up -d --build      # only when Dockerfile/compose/deps changed; then curl the touched routes
 ```
 
+CI (`.github/workflows/ci.yml`) runs the same checks; the pytest job uses the Dockerfile `test` stage.
+Keep it green: anything tests need at runtime (binaries like `pkill`) goes into that stage, never into `runtime`.
+Compose must keep `target: runtime`.
+
 ## Database (psycopg 3)
 
 - Rows are dicts via the typed pool in `db.py`. Never build another pool or call `psycopg.connect` untyped.
@@ -33,6 +37,8 @@ docker compose up -d --build      # only when Dockerfile/compose/deps changed; t
   default argument (ruff B008).
 - Client-facing errors are generic. Never put tool stderr, stack traces, file paths, hostnames, model names or
   prompt text in a response or `job.error`. Log details; return a message the customer can act on.
+- Every authenticated route goes through `auth._principal` (rate limit) and bills via `record_usage`
+  (sync) or `charge` (jobs; `QuotaExceeded` → `PermanentError`). Queued work calls `check_quota` before enqueueing.
 - Validate at the boundary: size caps, magic bytes (`uploads.read_pdf` also checks the PDF parses), pydantic
   constraints. Heavy/slow work → `jobs.enqueue` + `@jobs.handler`, not in the request.
 
@@ -63,7 +69,7 @@ docker compose up -d --build      # only when Dockerfile/compose/deps changed; t
 
 ## Process
 
-- Commits: one behavior each, ≤5 files, explicit paths, `feat`/`fix`/`refactor`/`test`/`docs`/`chore` separate.
+- Commits: no AI attribution lines (global rule). One behavior each, ≤5 files, explicit paths, `feat`/`fix`/`refactor`/`test`/`docs`/`chore` separate.
 - A bug gets a failing test first, then the fix.
 - The user may be editing in Cursor at the same time: re-read a file before editing it, keep their changes.
 - Comments: plain prose, no tag prefixes (the user removed `ponytail:` tags here).
