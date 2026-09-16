@@ -1,5 +1,4 @@
-from docforge.config import settings
-from docforge.core import jobs, retention, storage
+from docforge.core import blobs, jobs, retention, storage
 from docforge.db import connect, one
 
 
@@ -16,8 +15,8 @@ def _age(table: str, column: str, row_id: int, days: int) -> None:
                 raise ValueError((table, column))
 
 
-def _blob(sha: str):
-    return settings.storage_dir / sha[:2] / sha
+def _blob_exists(sha: str) -> bool:
+    return blobs.store.exists(sha)
 
 
 def _sha(file_id: int) -> str:
@@ -31,7 +30,7 @@ def test_old_unreferenced_file_and_blob_are_removed(org_id):
     _age("file", "created_at", fid, 40)
     assert retention.purge(retention_days=30)["files"] >= 1
     assert storage.get(fid, org_id) is None
-    assert not _blob(sha).exists()
+    assert not _blob_exists(sha)
 
 
 def test_recent_file_is_kept(org_id):

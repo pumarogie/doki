@@ -19,6 +19,7 @@ def main() -> None:
     ck.add_argument("--monthly-pages", type=int, default=None, help="page quota per calendar month (default: unlimited)")
     rk = sub.add_parser("revoke-key", help="revoke an API key by its visible prefix (df_<prefix>_...)")
     rk.add_argument("--prefix", required=True)
+    sub.add_parser("ensure-bucket", help="create the S3 bucket if STORAGE_BACKEND=s3 (no-op for local)")
     ev = sub.add_parser("eval-extract", help="measure extraction accuracy on synthetic invoices")
     ev.add_argument("--cases", type=int, default=50)
     ev.add_argument("--seed", type=int, default=7)
@@ -32,6 +33,19 @@ def main() -> None:
         print(json.dumps(report, indent=2))
         if args.min_accuracy is not None and report["accuracy"] < args.min_accuracy:
             raise SystemExit(f"accuracy {report['accuracy']} < {args.min_accuracy}")
+        return
+
+    if args.cmd == "ensure-bucket":
+        from docforge.core import blobs
+
+        store = blobs.store
+        if isinstance(store, blobs.S3Blobs):
+            existing = {b["Name"] for b in store.client.list_buckets().get("Buckets", [])}
+            if store.bucket not in existing:
+                store.client.create_bucket(Bucket=store.bucket)
+            print(f"bucket ready: {store.bucket}")
+        else:
+            print("local storage, nothing to do")
         return
 
     if args.cmd == "migrate":
