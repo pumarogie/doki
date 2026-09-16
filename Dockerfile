@@ -33,7 +33,7 @@ RUN useradd --system --uid 10001 app && mkdir -p /data/files && chown app /data/
 USER app
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s CMD curl -fsS http://localhost:8000/health || exit 1
-CMD ["uvicorn", "docforge.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+CMD ["uvicorn", "docforge.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--no-access-log"]
 
 # CI image: runtime + dev dependencies + tests. Build with --target test.
 FROM runtime AS test
