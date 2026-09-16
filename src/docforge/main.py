@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 
-from docforge import db, logs, observability
+from docforge import db, idempotency, logs, observability
 from docforge.auth import Principal, any_key
 from docforge.core import jobs, storage
 from docforge.products import einvoice, extract, pdfa, render, reports
@@ -23,6 +23,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="docforge", lifespan=lifespan)
+app.add_middleware(idempotency.IdempotencyMiddleware)
 app.add_middleware(observability.MetricsMiddleware)
 app.add_middleware(logs.RequestIdMiddleware)
 app.include_router(observability.router)
