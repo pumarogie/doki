@@ -6,3 +6,4 @@ data/
 .pytest_cache/
 vendor/
 .DS_Store
+.*/
