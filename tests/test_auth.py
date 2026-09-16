@@ -78,3 +78,35 @@ def test_revoke_key_by_prefix(client, key_for):
     assert revoke_key(prefix) is True
     assert revoke_key(prefix) is False
     assert client.get("/_test/pdfa", headers=headers).status_code == 401
+
+
+def test_token_bucket_refills_gradually(client, key_for):
+    from docforge.db import connect
+
+    headers = key_for("pdfa", rate_per_minute=3)
+    for _ in range(3):
+        assert client.get("/_test/pdfa", headers=headers).status_code == 200
+    r = client.get("/_test/pdfa", headers=headers)
+    assert r.status_code == 429
+    assert 15 <= int(r.headers["Retry-After"]) <= 20  # one token every 20s
+
+    prefix = headers["Authorization"].split("_")[1]
+    with connect() as conn:  # 20 seconds pass
+        conn.execute("""UPDATE rate_limit_state SET tat = tat - interval '20 seconds'
+                        WHERE api_key_id = (SELECT id FROM api_key WHERE prefix = %s)""", (prefix,))
+    assert client.get("/_test/pdfa", headers=headers).status_code == 200  # exactly one token back
+    assert client.get("/_test/pdfa", headers=headers).status_code == 429
+
+
+def test_no_double_burst_across_a_minute_boundary(client, key_for):
+    """A fixed window allowed 2x the limit around :59/:00; the bucket never does."""
+    from docforge.db import connect
+
+    headers = key_for("pdfa", rate_per_minute=4)
+    prefix = headers["Authorization"].split("_")[1]
+    allowed = sum(client.get("/_test/pdfa", headers=headers).status_code == 200 for _ in range(4))
+    with connect() as conn:  # 1 second passes, crossing what used to be a window boundary
+        conn.execute("""UPDATE rate_limit_state SET tat = tat - interval '1 second'
+                        WHERE api_key_id = (SELECT id FROM api_key WHERE prefix = %s)""", (prefix,))
+    allowed += sum(client.get("/_test/pdfa", headers=headers).status_code == 200 for _ in range(4))
+    assert allowed == 4
