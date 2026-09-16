@@ -30,7 +30,7 @@ def minio(monkeypatch_module):
     monkeypatch_module.setenv("AWS_DEFAULT_REGION", "us-east-1")
     endpoint = f"http://127.0.0.1:{port}"
     try:
-        store = blobs.S3Blobs("docforge-test", "files", endpoint)
+        store = blobs.S3Blobs("docforge-test", endpoint)
         for _ in range(60):
             try:
                 store.client.create_bucket(Bucket="docforge-test")
@@ -60,21 +60,21 @@ def store(request, tmp_path):
 def test_roundtrip_and_delete(store):
     data = uuid.uuid4().bytes * 100
     sha = hashlib.sha256(data).hexdigest()
-    assert not store.exists(sha)
     store.put(sha, data)
     store.put(sha, data)  # idempotent
-    assert store.exists(sha) and store.get(sha) == data
+    assert store.get(sha) == data
     store.delete(sha)
     store.delete(sha)  # deleting a missing blob is fine
-    assert not store.exists(sha)
+    with pytest.raises(Exception):  # noqa: B017  FileNotFoundError locally, NoSuchKey on S3
+        store.get(sha)
 
 
-def test_s3_keys_use_prefix(minio):
-    data = b"prefixed"
+def test_s3_keys_are_sharded_by_hash(minio):
+    data = b"sharded"
     sha = hashlib.sha256(data).hexdigest()
     minio.put(sha, data)
     keys = [o["Key"] for o in minio.client.list_objects_v2(Bucket="docforge-test")["Contents"]]
-    assert f"files/{sha[:2]}/{sha}" in keys
+    assert f"{sha[:2]}/{sha}" in keys
 
 
 def test_app_storage_works_on_s3(org_id, minio, monkeypatch):
