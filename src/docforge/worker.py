@@ -4,13 +4,13 @@ import time
 
 from docforge import db
 from docforge.auth import prune_rate_windows
-from docforge.core import jobs
+from docforge.core import jobs, retention
 from docforge.products import extract, reports  # noqa: F401  (registers job handlers)
 
 log = logging.getLogger("docforge.worker")
 
 
-def main(poll_seconds: float = 1.0, schedule_every: float = 20.0) -> None:
+def main(poll_seconds: float = 1.0, schedule_every: float = 20.0, purge_every: float = 3600.0) -> None:
     logging.basicConfig(level=logging.INFO)
     stopping = False
 
@@ -23,6 +23,7 @@ def main(poll_seconds: float = 1.0, schedule_every: float = 20.0) -> None:
     db.pool.open()
     log.info("worker started, handlers=%s", sorted(jobs.HANDLERS))
     last_schedule_check = 0.0
+    last_purge = 0.0
     try:
         while not stopping:
             if time.monotonic() - last_schedule_check >= schedule_every:
@@ -30,6 +31,9 @@ def main(poll_seconds: float = 1.0, schedule_every: float = 20.0) -> None:
                     log.info("queued %d scheduled report(s)", queued)
                 prune_rate_windows()
                 last_schedule_check = time.monotonic()
+            if time.monotonic() - last_purge >= purge_every:
+                retention.purge()
+                last_purge = time.monotonic()
             if not jobs.run_once():
                 time.sleep(poll_seconds)
     finally:
