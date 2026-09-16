@@ -55,10 +55,8 @@ class IdempotencyMiddleware:
                                                     "message": "a request with this key is still running"}))
             return
         if isinstance(state, dict):
-            data = b""
-            if state["response_file_id"] is not None:
-                found = storage.get(state["response_file_id"], owner["organization_id"])
-                data = found[1] if found else b""
+            found = storage.get(state["response_file_id"], owner["organization_id"])
+            data = found[1] if found else b""
             await self._respond(send, state["status_code"], data, state["content_type"] or "application/octet-stream",
                                 replayed=True)
             return
