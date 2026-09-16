@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse, Response
 from docforge import db
 from docforge.auth import Principal, any_key
 from docforge.core import jobs, storage
-from docforge.products import einvoice, extract, pdfa, render
+from docforge.products import einvoice, extract, pdfa, render, reports
 
 log = logging.getLogger("docforge")
 
@@ -25,6 +25,7 @@ app.include_router(pdfa.router)
 app.include_router(einvoice.router)
 app.include_router(render.router)
 app.include_router(extract.router)
+app.include_router(reports.router)
 
 
 @app.exception_handler(Exception)
