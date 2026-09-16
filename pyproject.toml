@@ -14,13 +14,21 @@ dependencies = [
     "playwright>=1.63.0",
     "jinja2>=3.1.6",
     "anthropic>=1.6.0",
+    "croniter>=6.2.4",
+    "paramiko>=5.0.0",
+    "cryptography>=50.0.1",
+    "pydantic[email]>=2.13.5",
 ]
 
 [project.scripts]
 docforge = "docforge.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=8", "httpx>=0.27"]
+dev = [
+    "pytest>=8",
+    "httpx>=0.27",
+    "aiosmtpd>=1.4.6",
+]
 
 [build-system]
 requires = ["hatchling"]
