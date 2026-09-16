@@ -1,4 +1,5 @@
 import logging
+import time
 from collections.abc import Callable
 
 from psycopg.types.json import Jsonb
@@ -85,19 +86,26 @@ def run_once() -> bool:
         return False
     fn = HANDLERS.get((job["product"], job["operation"]))
     token = logs.request_id.set(f"job-{job['id']}")
+    started = time.perf_counter()
+    outcome = "done"
     try:
         if fn is None:
             raise PermanentError("unsupported operation")
         result = fn(job)
     except PermanentError as e:
+        outcome = "failed"
         fail(job, str(e), permanent=True)
     except Exception:
+        outcome = "retry" if job["attempts"] < MAX_ATTEMPTS else "failed"
         # Details go to logs only; clients see a generic message.
         log.exception("job %s failed (attempt %s)", job["id"], job["attempts"])
         fail(job, "processing failed", permanent=False)
     else:
         finish(job["id"], result, output_file_id=result.pop("output_file_id", None))
     finally:
+        from docforge.observability import job_observed
+
+        job_observed(job["product"], job["operation"], outcome, time.perf_counter() - started)
         logs.request_id.reset(token)
     return True
 
