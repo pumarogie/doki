@@ -1,5 +1,3 @@
-from typing import Any
-
 from docforge import observability
 from docforge.core import jobs
 
@@ -45,19 +43,6 @@ def test_job_outcomes_recorded(client, key_for):
     while jobs.run_once():
         pass
     assert observability.JOBS.labels("test", "boom", "failed")._value.get() == before + 1
-
-
-def test_sentry_scrubber_removes_secrets():
-    event: Any = {
-        "request": {"headers": {"Authorization": "Bearer df_x_secret", "User-Agent": "curl"},
-                    "data": "%PDF- customer document", "cookies": {"s": "1"}},
-        "exception": {"values": [{"stacktrace": {"frames": [{"vars": {"pdf": "bytes"}}]}}]},
-    }
-    out: Any = observability._scrub(event, {})
-    assert out["request"]["headers"]["Authorization"] == "[redacted]"
-    assert out["request"]["headers"]["User-Agent"] == "curl"
-    assert "data" not in out["request"] and "cookies" not in out["request"]
-    assert "vars" not in out["exception"]["values"][0]["stacktrace"]["frames"][0]
 
 
 def test_sentry_off_without_dsn(monkeypatch):

@@ -103,9 +103,10 @@ def run_once() -> bool:
     else:
         finish(job["id"], result, output_file_id=result.pop("output_file_id", None))
     finally:
-        from docforge.observability import job_observed
+        from docforge.observability import JOB_SECONDS, JOBS
 
-        job_observed(job["product"], job["operation"], outcome, time.perf_counter() - started)
+        JOBS.labels(job["product"], job["operation"], outcome).inc()
+        JOB_SECONDS.labels(job["product"], job["operation"]).observe(time.perf_counter() - started)
         logs.request_id.reset(token)
     return True
 

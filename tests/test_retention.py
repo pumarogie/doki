@@ -16,7 +16,11 @@ def _age(table: str, column: str, row_id: int, days: int) -> None:
 
 
 def _blob_exists(sha: str) -> bool:
-    return blobs.store.exists(sha)
+    try:
+        blobs.store.get(sha)
+    except FileNotFoundError:
+        return False
+    return True
 
 
 def _sha(file_id: int) -> str:
