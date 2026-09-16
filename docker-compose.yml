@@ -11,6 +11,7 @@ x-app: &app
     ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     SMTP_HOST: mailpit
     SMTP_PORT: "1025"
+    KOSIT_URL: http://kosit:8080
     SMTP_FROM: ${SMTP_FROM:-reports@docforge.local}
   volumes:
     - files:/data/files
@@ -47,12 +48,25 @@ services:
     depends_on:
       db: { condition: service_healthy }
 
+  kosit:
+    <<: *app
+    command: ["java", "-jar", "/opt/kosit/validator.jar", "-s", "/opt/kosit/config/scenarios.xml",
+              "-r", "/opt/kosit/config", "-D", "-G", "-H", "0.0.0.0", "-P", "8080"]
+    environment: {}  # needs no secrets
+    volumes: []
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -o /dev/null -X POST --data '<a/>' http://localhost:8080/ || [ $? -eq 22 ]"]
+      interval: 5s
+      retries: 30
+      start_period: 20s
+
   api:
     <<: *app
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
       migrate: { condition: service_completed_successfully }
+      kosit: { condition: service_healthy }
 
   worker:
     <<: *app
@@ -61,9 +75,10 @@ services:
       disable: true
     depends_on:
       migrate: { condition: service_completed_successfully }
+      kosit: { condition: service_healthy }
 
   mailpit:
-    image: axllent/mailpit:latest
+    image: axllent/mailpit:v1.31.1
     ports:
       - "127.0.0.1:8025:8025"
     restart: unless-stopped
