@@ -96,3 +96,34 @@ def test_invalid_render_requests(client, key_for, body):
 
 def test_requires_render_scope(client, key_for):
     assert client.get("/v1/templates", headers=key_for("pdfa")).status_code == 403
+
+
+def test_html_renders_reuse_one_browser(client, key_for):
+    import time
+
+    from docforge.core.render import chromium
+
+    headers = key_for("render")
+    client.post("/v1/render", headers=headers, json={"engine": "html", "source": "<p>warm-up</p>"})
+    first = chromium.browser_id()
+    started = time.monotonic()
+    for i in range(5):
+        r = client.post("/v1/render", headers=headers, json={"engine": "html", "source": f"<p>{i}</p>"})
+        assert r.status_code == 200
+    assert time.monotonic() - started < 3
+    assert chromium.browser_id() == first
+
+
+def test_html_render_survives_browser_crash(client, key_for):
+    import subprocess
+
+    from docforge.core.render import chromium
+
+    headers = key_for("render")
+    assert client.post("/v1/render", headers=headers, json={"engine": "html", "source": "<p>a</p>"}).status_code == 200
+    before = chromium.browser_id()
+    killed = subprocess.run(["pkill", "-f", "headless[_-]shell"], check=False).returncode == 0
+    assert killed, "no chromium process found to kill"
+    r = client.post("/v1/render", headers=headers, json={"engine": "html", "source": "<p>b</p>"})
+    assert r.status_code == 200 and r.content.startswith(b"%PDF-")
+    assert chromium.browser_id() != before
