@@ -49,6 +49,13 @@ uv run python -m docforge.worker             # jobs + schedules
 Database roles: migrations run as `docforge_owner`; the app connects as `docforge_app` (DML only).
 See `docker/initdb.sh` for the grants.
 
+## Extraction quality
+
+`docforge eval-extract --cases 50` renders 50 synthetic German/English invoices (varied layouts, date and
+amount formats, missing fields) and reports per-field accuracy plus confidence calibration (ECE).
+The default mock provider only checks the harness; set `LLM_PROVIDER=claude` for a real (paid) run and
+gate with `--min-accuracy 0.95`.
+
 ## CI
 
 `.github/workflows/ci.yml` runs ruff + pyright, then builds `docker build --target test` (the runtime image plus
