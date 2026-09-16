@@ -21,13 +21,19 @@ class PermanentError(Exception):
 # A result key "output_file_id" is moved into job.output_file_id.
 Handler = Callable[[dict], dict]
 HANDLERS: dict[tuple[str, str], Handler] = {}
+ATTEMPTS: dict[tuple[str, str], int] = {}
 
 
-def handler(product: str, operation: str):
+def handler(product: str, operation: str, max_attempts: int = MAX_ATTEMPTS):
     def register(fn: Handler) -> Handler:
         HANDLERS[(product, operation)] = fn
+        ATTEMPTS[(product, operation)] = max_attempts
         return fn
     return register
+
+
+def _max_attempts(job: dict) -> int:
+    return ATTEMPTS.get((job["product"], job["operation"]), MAX_ATTEMPTS)
 
 
 def enqueue(api_key_id: int, product: str, operation: str, params: dict, input_file_id: int | None = None) -> int:
@@ -65,7 +71,7 @@ def finish(job_id: int, result: dict, output_file_id: int | None = None) -> None
 
 def fail(job: dict, message: str, permanent: bool) -> None:
     with connect() as conn:
-        if permanent or job["attempts"] >= MAX_ATTEMPTS:
+        if permanent or job["attempts"] >= _max_attempts(job):
             conn.execute(
                 "UPDATE job SET status = 'failed', error = %s, finished_at = now() WHERE id = %s",
                 (message, job["id"]),
@@ -73,7 +79,7 @@ def fail(job: dict, message: str, permanent: bool) -> None:
         else:
             conn.execute(
                 """UPDATE job SET status = 'queued', started_at = NULL,
-                          run_after = now() + make_interval(secs => 30 * power(2, attempts - 1))
+                          run_after = now() + make_interval(secs => least(30 * power(2, attempts - 1), 3600))
                    WHERE id = %s""",
                 (job["id"],),
             )
@@ -96,7 +102,7 @@ def run_once() -> bool:
         outcome = "failed"
         fail(job, str(e), permanent=True)
     except Exception:
-        outcome = "retry" if job["attempts"] < MAX_ATTEMPTS else "failed"
+        outcome = "retry" if job["attempts"] < _max_attempts(job) else "failed"
         # Details go to logs only; clients see a generic message.
         log.exception("job %s failed (attempt %s)", job["id"], job["attempts"])
         fail(job, "processing failed", permanent=False)
