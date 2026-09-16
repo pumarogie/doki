@@ -143,3 +143,53 @@ def test_pool_renders_in_parallel():
     served = [w.served for w in engine.chromium.workers]
     assert sum(served) - before == 6
     assert engine.chromium.size >= 2 and sum(1 for n in served if n) >= 2
+
+
+def test_typst_workers_are_reused():
+    from docforge.core import render as engine
+
+    engine.render("typst", "= warm", {})
+    pids = {p.pid() for p in engine.typst_pool.processes} - {None}
+    for i in range(6):
+        engine.render("typst", f"= page {i}", {})
+    assert pids and pids <= {p.pid() for p in engine.typst_pool.processes}
+
+
+def test_typst_worker_restarts_after_timeout_and_crash():
+    import os
+    import signal
+
+    from docforge.core import render as engine
+
+    with pytest.raises(engine.TemplateError, match="longer than"):
+        engine.render("typst", "#for i in range(1000000000) { [x] }", {}, timeout=1)
+    assert engine.render("typst", "= after timeout", {}).startswith(b"%PDF-")
+
+    for p in engine.typst_pool.processes:
+        if (pid := p.pid()) is not None:
+            os.kill(pid, signal.SIGKILL)
+    assert engine.render("typst", "= after crash", {}).startswith(b"%PDF-")
+
+
+def test_typst_worker_recycles_after_max_renders(monkeypatch):
+    from docforge.core import render as engine
+
+    monkeypatch.setattr(engine._TypstProcess, "MAX_RENDERS", 2)
+    proc = engine.typst_pool.processes[0]
+    engine.typst_pool.processes[0].compile(b'{"source": "= a"}', 10)
+    first = proc.pid()
+    proc.compile(b'{"source": "= b"}', 10)
+    proc.compile(b'{"source": "= c"}', 10)
+    assert proc.pid() != first
+
+
+def test_typst_is_fast_when_warm():
+    import time
+
+    from docforge.core import render as engine
+
+    engine.render("typst", "= warm", {})
+    started = time.monotonic()
+    for i in range(5):
+        engine.render("typst", f"= fast {i}", {})
+    assert (time.monotonic() - started) / 5 < 0.25
