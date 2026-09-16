@@ -41,7 +41,10 @@ def validate(data: bytes, timeout: float = 120) -> dict:
     source = "pdf" if data.lstrip().startswith(b"%PDF-") else "xml"
     xml = embedded_xml(data) if source == "pdf" else data
     daemon = os.environ.get("KOSIT_URL")
-    report = _via_daemon(daemon, xml, timeout) if daemon else _via_cli(xml, timeout)
+    from docforge.observability import timed
+
+    with timed("kosit"):
+        report = _via_daemon(daemon, xml, timeout) if daemon else _via_cli(xml, timeout)
     return {"source": source, **_summarize(report)}
 
 

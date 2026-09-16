@@ -1,10 +1,11 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 
-from docforge import db, logs
+from docforge import db, logs, observability
 from docforge.auth import Principal, any_key
 from docforge.core import jobs, storage
 from docforge.products import einvoice, extract, pdfa, render, reports
@@ -15,13 +16,16 @@ log = logging.getLogger("docforge")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logs.configure()
+    observability.init_sentry("api")
     db.pool.open()
     yield
     db.pool.close()
 
 
 app = FastAPI(title="docforge", lifespan=lifespan)
+app.add_middleware(observability.MetricsMiddleware)
 app.add_middleware(logs.RequestIdMiddleware)
+app.include_router(observability.router)
 app.include_router(pdfa.router)
 app.include_router(einvoice.router)
 app.include_router(render.router)
@@ -34,6 +38,10 @@ async def unhandled(request: Request, exc: Exception):
     # Never leak internals (engine, model, stack) to clients.
     rid = logs.request_id.get() or logs.new_id()
     log.exception("unhandled error on %s", request.url.path)
+    if os.environ.get("SENTRY_DSN"):
+        import sentry_sdk
+
+        sentry_sdk.capture_exception(exc)
     return JSONResponse({"error": "internal_error", "request_id": rid}, status_code=500,
                         headers={"X-Request-ID": rid})
 

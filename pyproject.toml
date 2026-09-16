@@ -19,6 +19,8 @@ dependencies = [
     "cryptography>=50.0.1",
     "pydantic[email]>=2.13.5",
     "boto3>=1.43.96",
+    "sentry-sdk[fastapi]>=2.69.2",
+    "prometheus-client>=0.26.0",
 ]
 
 [project.scripts]
