@@ -1,5 +1,4 @@
 import logging
-import os
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -39,10 +38,6 @@ async def unhandled(request: Request, exc: Exception):
     # Never leak internals (engine, model, stack) to clients.
     rid = logs.request_id.get() or logs.new_id()
     log.exception("unhandled error on %s", request.url.path)
-    if os.environ.get("SENTRY_DSN"):
-        import sentry_sdk
-
-        sentry_sdk.capture_exception(exc)
     return JSONResponse({"error": "internal_error", "request_id": rid}, status_code=500,
                         headers={"X-Request-ID": rid})
 
