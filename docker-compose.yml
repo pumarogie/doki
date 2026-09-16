@@ -1,0 +1,73 @@
+# Local/staging stack. Secrets come from .env (see .env.example); compose refuses to start without them.
+x-app: &app
+  build:
+    context: .
+    network: host  # BuildKit's default network fails DNS on some Docker Desktop setups
+  image: docforge:local
+  environment: &app-env
+    DATABASE_URL: postgresql://docforge_app:${DOCFORGE_APP_PASSWORD:?set in .env}@db:5432/docforge
+    DOCFORGE_SECRET_KEY: ${DOCFORGE_SECRET_KEY:?set in .env}
+    LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+    ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    SMTP_HOST: mailpit
+    SMTP_PORT: "1025"
+    SMTP_FROM: ${SMTP_FROM:-reports@docforge.local}
+  volumes:
+    - files:/data/files
+  restart: unless-stopped
+
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      DOCFORGE_OWNER_PASSWORD: ${DOCFORGE_OWNER_PASSWORD:?set in .env}
+      DOCFORGE_APP_PASSWORD: ${DOCFORGE_APP_PASSWORD:?set in .env}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    command: >
+      postgres
+      -c shared_preload_libraries=pg_stat_statements
+      -c log_min_duration_statement=250ms
+      -c log_lock_waits=on
+      -c log_temp_files=0
+      -c track_io_timing=on
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/initdb.sh:/docker-entrypoint-initdb.d/10-docforge.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d docforge"]
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    <<: *app
+    command: ["docforge", "migrate", "--url", "postgresql://docforge_owner:${DOCFORGE_OWNER_PASSWORD}@db:5432/docforge"]
+    restart: "no"
+    depends_on:
+      db: { condition: service_healthy }
+
+  api:
+    <<: *app
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  worker:
+    <<: *app
+    command: ["python", "-m", "docforge.worker"]
+    healthcheck:
+      disable: true
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "127.0.0.1:8025:8025"
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  files:
