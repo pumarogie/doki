@@ -15,7 +15,8 @@ class PermanentError(Exception):
     """Retrying won't help. The message is shown to the client."""
 
 
-# (product, operation) -> handler(job) -> result dict
+# (product, operation) -> handler(job) -> result dict.
+# A result key "output_file_id" is moved into job.output_file_id.
 Handler = Callable[[dict], dict]
 HANDLERS: dict[tuple[str, str], Handler] = {}
 
@@ -92,7 +93,7 @@ def run_once() -> bool:
         log.exception("job %s failed (attempt %s)", job["id"], job["attempts"])
         fail(job, "processing failed", permanent=False)
     else:
-        finish(job["id"], result)
+        finish(job["id"], result, output_file_id=result.pop("output_file_id", None))
     return True
 
 
