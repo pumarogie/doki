@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from docforge.db import connect
+from docforge.db import connect, one
 
 PRODUCTS = ("pdfa", "einvoice", "render", "extract", "reports")
 
@@ -31,10 +31,11 @@ def create_key(organization_id: int, products: list[str]) -> str:
     prefix = secrets.token_hex(4)
     key = f"df_{prefix}_{secrets.token_urlsafe(32)}"
     with connect() as conn:
-        key_id = conn.execute(
+        key_id = one(
+            conn,
             "INSERT INTO api_key (organization_id, prefix, key_hash) VALUES (%s, %s, %s) RETURNING id",
             (organization_id, prefix, hash_key(key)),
-        ).fetchone()["id"]
+        )["id"]
         for p in products:
             conn.execute("INSERT INTO api_key_product (api_key_id, product) VALUES (%s, %s)", (key_id, p))
     return key

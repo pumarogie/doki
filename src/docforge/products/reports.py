@@ -11,7 +11,7 @@ from pydantic import BaseModel, EmailStr, Field, StringConstraints, field_valida
 from docforge.auth import Principal, require_product
 from docforge.core import deliver, jobs, render, secrets, storage
 from docforge.core.jobs import PermanentError
-from docforge.db import connect
+from docforge.db import connect, one
 from docforge.uploads import page_count
 
 log = logging.getLogger(__name__)
@@ -105,12 +105,13 @@ def _get(conn, principal: Principal, schedule_id: int) -> dict:
 def create(body: ScheduleIn, principal: Principal = Depends(guard)):
     with connect() as conn:
         _check_template(conn, principal, body.template_id)
-        row = conn.execute(
+        row = one(
+            conn,
             """INSERT INTO schedule (api_key_id, name, template_id, cron, timezone, data, delivery, next_run_at, enabled)
                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
             (principal.api_key_id, body.name, body.template_id, body.cron, body.timezone, Jsonb(body.data),
              Jsonb(_stored_delivery(body.delivery)), next_run(body.cron, body.timezone), body.enabled),
-        ).fetchone()
+        )
         return _public(_get(conn, principal, row["id"]))
 
 

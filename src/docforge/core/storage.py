@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 
 from docforge.config import settings
-from docforge.db import connect
+from docforge.db import connect, one
 
 
 def _path(sha256: str) -> Path:
@@ -20,13 +20,14 @@ def put(organization_id: int, data: bytes, filename: str, content_type: str) -> 
         tmp.write_bytes(data)
         os.replace(tmp, path)
     with connect() as conn:
-        return conn.execute(
+        return one(
+            conn,
             """INSERT INTO file (organization_id, sha256, filename, content_type, size_bytes)
                VALUES (%s, %s, %s, %s, %s)
                ON CONFLICT (organization_id, sha256) DO UPDATE SET filename = file.filename
                RETURNING id""",
             (organization_id, sha, filename[:255], content_type, len(data)),
-        ).fetchone()["id"]
+        )["id"]
 
 
 def get(file_id: int, organization_id: int) -> tuple[dict, bytes] | None:

@@ -3,7 +3,7 @@ from collections.abc import Callable
 
 from psycopg.types.json import Jsonb
 
-from docforge.db import connect
+from docforge.db import connect, one
 
 log = logging.getLogger(__name__)
 
@@ -30,11 +30,12 @@ def handler(product: str, operation: str):
 
 def enqueue(api_key_id: int, product: str, operation: str, params: dict, input_file_id: int | None = None) -> int:
     with connect() as conn:
-        return conn.execute(
+        return one(
+            conn,
             """INSERT INTO job (api_key_id, product, operation, params, input_file_id)
                VALUES (%s, %s, %s, %s, %s) RETURNING id""",
             (api_key_id, product, operation, Jsonb(params), input_file_id),
-        ).fetchone()["id"]
+        )["id"]
 
 
 def claim() -> dict | None:
