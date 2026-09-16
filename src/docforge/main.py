@@ -1,11 +1,10 @@
 import logging
-import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 
-from docforge import db
+from docforge import db, logs
 from docforge.auth import Principal, any_key
 from docforge.core import jobs, storage
 from docforge.products import einvoice, extract, pdfa, render, reports
@@ -15,12 +14,14 @@ log = logging.getLogger("docforge")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logs.configure()
     db.pool.open()
     yield
     db.pool.close()
 
 
 app = FastAPI(title="docforge", lifespan=lifespan)
+app.add_middleware(logs.RequestIdMiddleware)
 app.include_router(pdfa.router)
 app.include_router(einvoice.router)
 app.include_router(render.router)
@@ -31,9 +32,10 @@ app.include_router(reports.router)
 @app.exception_handler(Exception)
 async def unhandled(request: Request, exc: Exception):
     # Never leak internals (engine, model, stack) to clients.
-    request_id = uuid.uuid4().hex
-    log.exception("unhandled error request_id=%s path=%s", request_id, request.url.path)
-    return JSONResponse({"error": "internal_error", "request_id": request_id}, status_code=500)
+    rid = logs.request_id.get() or logs.new_id()
+    log.exception("unhandled error on %s", request.url.path)
+    return JSONResponse({"error": "internal_error", "request_id": rid}, status_code=500,
+                        headers={"X-Request-ID": rid})
 
 
 @app.get("/health")
