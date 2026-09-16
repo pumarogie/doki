@@ -1,8 +1,8 @@
 from fastapi import Depends
 
-from docforge import db
-from docforge.auth import Principal, record_usage, require_product
-from docforge.main import app
+from doki import db
+from doki.auth import Principal, record_usage, require_product
+from doki.main import app
 
 pdfa_guard = require_product("pdfa")
 
@@ -19,7 +19,7 @@ def test_health(client):
 
 def test_missing_and_invalid_key_rejected(client):
     assert client.get("/_test/pdfa").status_code == 401
-    assert client.get("/_test/pdfa", headers={"Authorization": "Bearer df_nope"}).status_code == 401
+    assert client.get("/_test/pdfa", headers={"Authorization": "Bearer dk_nope"}).status_code == 401
 
 
 def test_scope_enforced(client, key_for):
@@ -71,7 +71,7 @@ def test_monthly_page_quota_gives_402(client, key_for):
 
 
 def test_revoke_key_by_prefix(client, key_for):
-    from docforge.auth import revoke_key
+    from doki.auth import revoke_key
 
     headers = key_for("pdfa")
     prefix = headers["Authorization"].split("_")[1]
@@ -81,7 +81,7 @@ def test_revoke_key_by_prefix(client, key_for):
 
 
 def test_token_bucket_refills_gradually(client, key_for):
-    from docforge.db import connect
+    from doki.db import connect
 
     headers = key_for("pdfa", rate_per_minute=3)
     for _ in range(3):
@@ -100,7 +100,7 @@ def test_token_bucket_refills_gradually(client, key_for):
 
 def test_no_double_burst_across_a_minute_boundary(client, key_for):
     """A fixed window allowed 2x the limit around :59/:00; the bucket never does."""
-    from docforge.db import connect
+    from doki.db import connect
 
     headers = key_for("pdfa", rate_per_minute=4)
     prefix = headers["Authorization"].split("_")[1]

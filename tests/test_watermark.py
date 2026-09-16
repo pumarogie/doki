@@ -3,8 +3,8 @@ import subprocess
 
 import pytest
 
-from docforge.core import jobs, watermark
-from docforge.db import connect, one
+from doki.core import jobs, watermark
+from doki.db import connect, one
 
 TYPST = "= Watermarked"
 
@@ -28,7 +28,7 @@ def test_watermark_keeps_pdfa_valid(client, key_for):
 
 @pytest.mark.skipif(not shutil.which("gs"), reason="needs ghostscript")
 def test_converted_pdf_is_stamped_and_traceable(client, key_for, tmp_path):
-    from docforge.auth import trace
+    from doki.auth import trace
 
     src = tmp_path / "p.pdf"
     subprocess.run(["gs", "-q", "-dBATCH", "-dNOPAUSE", "-sDEVICE=pdfwrite", f"-sOutputFile={src}",
@@ -51,7 +51,7 @@ def test_scheduled_report_is_stamped_with_job_id(client, key_for, monkeypatch):
     }).json()["id"]
     job_id = client.post(f"/v1/schedules/{sid}/run", headers=headers).json()["job_id"]
 
-    from docforge.core import deliver
+    from doki.core import deliver
 
     monkeypatch.setattr(deliver, "email", lambda *a, **k: None)
     while jobs.run_once():
@@ -63,7 +63,7 @@ def test_scheduled_report_is_stamped_with_job_id(client, key_for, monkeypatch):
 
 
 def test_no_trace_leaves_pdf_untouched():
-    from docforge.core import render
+    from doki.core import render
 
     pdf = render.render("typst", TYPST, {})
     assert watermark.stamp(pdf, None) == pdf

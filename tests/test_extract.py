@@ -4,9 +4,9 @@ import subprocess
 
 import pytest
 
-from docforge.core import jobs, llm
-from docforge.core.extract import SCHEMAS
-from docforge.db import connect, one
+from doki.core import jobs, llm
+from doki.core.extract import SCHEMAS
+from doki.db import connect, one
 
 pytestmark = pytest.mark.skipif(not shutil.which("gs"), reason="needs ghostscript to build fixture PDFs")
 
@@ -132,7 +132,7 @@ def test_stale_running_job_is_requeued(client, key_for, invoice_pdf):
 
 
 def test_jobs_and_files_are_isolated_per_organization(client, key_for, invoice_pdf):
-    from docforge.auth import create_key
+    from doki.auth import create_key
 
     headers = key_for("extract")
     job_id = _submit(client, headers, invoice_pdf).json()["job_id"]

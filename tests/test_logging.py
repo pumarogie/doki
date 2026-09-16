@@ -3,8 +3,8 @@ import logging
 
 from fastapi.testclient import TestClient
 
-from docforge import logs
-from docforge.main import app
+from doki import logs
+from doki.main import app
 
 
 @app.get("/_test/boom")
@@ -36,9 +36,9 @@ def test_500_body_and_header_share_the_id_without_leaking(client):
 
 
 def test_access_log_line_has_request_fields(client, caplog):
-    with caplog.at_level(logging.INFO, logger="docforge.access"):
+    with caplog.at_level(logging.INFO, logger="doki.access"):
         client.get("/health", headers={"X-Request-ID": "log-me"})
-    record = next(r for r in caplog.records if r.name == "docforge.access")
+    record = next(r for r in caplog.records if r.name == "doki.access")
     line = json.loads(logs.JsonFormatter().format(record))
     assert line["path"] == "/health" and line["status"] == 200 and line["method"] == "GET"
     assert line["duration_ms"] >= 0

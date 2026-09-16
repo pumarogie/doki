@@ -7,9 +7,9 @@ import uuid
 import pytest
 from aiosmtpd.controller import Controller
 
-from docforge.core import deliver, jobs
-from docforge.db import connect, one
-from docforge.products import reports
+from doki.core import deliver, jobs
+from doki.db import connect, one
+from doki.products import reports
 
 TYPST = '#let d = json(bytes(sys.inputs.data))\n= Report #d.period'
 
@@ -140,7 +140,7 @@ def test_template_in_use_cannot_be_deleted(client, key_for, template_id):
 
 
 def test_schedule_crud_and_isolation(client, key_for, template_id):
-    from docforge.auth import create_key
+    from doki.auth import create_key
 
     headers = key_for("reports")
     sid = client.post("/v1/schedules", headers=headers, json=_schedule(template_id)).json()["id"]
@@ -172,7 +172,7 @@ def sftp_server():
     if not shutil.which("docker") or subprocess.run(["docker", "info"], capture_output=True, check=False).returncode != 0:
         pytest.skip("needs docker")
     port = _free_port()
-    name = f"docforge-sftp-{uuid.uuid4().hex[:8]}"
+    name = f"doki-sftp-{uuid.uuid4().hex[:8]}"
     subprocess.run(["docker", "run", "-d", "--rm", "--name", name, "-p", f"127.0.0.1:{port}:22",
                     "atmoz/sftp:alpine", "user:pass:::upload"], check=True, capture_output=True)
     try:

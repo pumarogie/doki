@@ -4,25 +4,25 @@ x-app: &app
     context: .
     target: runtime
     network: host  # BuildKit's default network fails DNS on some Docker Desktop setups
-  image: docforge:local
+  image: doki:local
   environment: &app-env
-    DATABASE_URL: postgresql://docforge_app:${DOCFORGE_APP_PASSWORD:?set in .env}@db:5432/docforge
-    DOCFORGE_SECRET_KEY: ${DOCFORGE_SECRET_KEY:?set in .env}
+    DATABASE_URL: postgresql://doki_app:${DOKI_APP_PASSWORD:?set in .env}@db:5432/doki
+    DOKI_SECRET_KEY: ${DOKI_SECRET_KEY:?set in .env}
     LLM_PROVIDER: ${LLM_PROVIDER:-mock}
     ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     SMTP_HOST: mailpit
     SMTP_PORT: "1025"
     KOSIT_URL: http://kosit:8080
     STORAGE_BACKEND: s3
-    S3_BUCKET: docforge-files
+    S3_BUCKET: doki-files
     S3_ENDPOINT_URL: http://minio:9000
-    AWS_ACCESS_KEY_ID: docforge
+    AWS_ACCESS_KEY_ID: doki
     AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?set in .env}
     AWS_DEFAULT_REGION: us-east-1
     SENTRY_DSN: ${SENTRY_DSN:-}
     METRICS_TOKEN: ${METRICS_TOKEN:-}
     WORKER_METRICS_PORT: "9100"
-    SMTP_FROM: ${SMTP_FROM:-reports@docforge.local}
+    SMTP_FROM: ${SMTP_FROM:-reports@doki.local}
   restart: unless-stopped
 
 services:
@@ -30,8 +30,8 @@ services:
     image: postgres:17
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
-      DOCFORGE_OWNER_PASSWORD: ${DOCFORGE_OWNER_PASSWORD:?set in .env}
-      DOCFORGE_APP_PASSWORD: ${DOCFORGE_APP_PASSWORD:?set in .env}
+      DOKI_OWNER_PASSWORD: ${DOKI_OWNER_PASSWORD:?set in .env}
+      DOKI_APP_PASSWORD: ${DOKI_APP_PASSWORD:?set in .env}
       POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
     command: >
       postgres
@@ -42,9 +42,9 @@ services:
       -c track_io_timing=on
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./docker/initdb.sh:/docker-entrypoint-initdb.d/10-docforge.sh:ro
+      - ./docker/initdb.sh:/docker-entrypoint-initdb.d/10-doki.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d docforge"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d doki"]
       interval: 5s
       retries: 20
     restart: unless-stopped
@@ -53,7 +53,7 @@ services:
     image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     command: ["server", "/data"]
     environment:
-      MINIO_ROOT_USER: docforge
+      MINIO_ROOT_USER: doki
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set in .env}
     volumes:
       - objects:/data
@@ -65,7 +65,7 @@ services:
 
   migrate:
     <<: *app
-    command: ["sh", "-c", "docforge migrate --url postgresql://docforge_owner:${DOCFORGE_OWNER_PASSWORD}@db:5432/docforge && docforge ensure-bucket"]
+    command: ["sh", "-c", "doki migrate --url postgresql://doki_owner:${DOKI_OWNER_PASSWORD}@db:5432/doki && doki ensure-bucket"]
     restart: "no"
     depends_on:
       db: { condition: service_healthy }
@@ -93,7 +93,7 @@ services:
 
   worker:
     <<: *app
-    command: ["python", "-m", "docforge.worker"]
+    command: ["python", "-m", "doki.worker"]
     healthcheck:
       disable: true
     depends_on:

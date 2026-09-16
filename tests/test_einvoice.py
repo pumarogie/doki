@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from docforge.core.einvoice import KOSIT_DIR
+from doki.core.einvoice import KOSIT_DIR
 
 FIXTURES = Path(__file__).parent / "fixtures" / "xrechnung"
 

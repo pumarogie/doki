@@ -6,9 +6,9 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
-from docforge import webhooks
-from docforge.core import jobs
-from docforge.db import connect, one
+from doki import webhooks
+from doki.core import jobs
+from doki.db import connect, one
 
 
 class Receiver:
@@ -81,10 +81,10 @@ def test_finished_job_sends_signed_event(client, key_for, receiver):
     req = receiver.requests[0]
     event = json.loads(req["body"])
     assert event["type"] == "job.succeeded" and event["data"]["job_id"] == job_id
-    ts, v1 = (part.split("=", 1)[1] for part in req["headers"]["Docforge-Signature"].split(","))
+    ts, v1 = (part.split("=", 1)[1] for part in req["headers"]["Doki-Signature"].split(","))
     expected = hmac.new(secret.encode(), f"{ts}.".encode() + req["body"], hashlib.sha256).hexdigest()
     assert hmac.compare_digest(v1, expected)
-    assert req["headers"]["Docforge-Event-Id"] == event["id"]
+    assert req["headers"]["Doki-Event-Id"] == event["id"]
 
 
 def test_failed_job_sends_failed_event(client, key_for, receiver):
@@ -139,7 +139,7 @@ def test_unsafe_urls_rejected(client, key_for, monkeypatch, url):
 
 
 def test_endpoints_are_isolated_and_deletable(client, key_for, receiver):
-    from docforge.auth import create_key
+    from doki.auth import create_key
 
     headers = key_for("render")
     eid = client.post("/v1/webhooks", headers=headers, json={"url": receiver.url}).json()["id"]
@@ -179,7 +179,7 @@ def _patient(job):
 
 
 def test_retry_backoff_is_capped_at_an_hour(key_for):
-    from docforge.core.jobs import fail
+    from doki.core.jobs import fail
 
     key_for("render")
     job_id = jobs.enqueue(_key_id(), "test", "patient", {})

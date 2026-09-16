@@ -1,5 +1,5 @@
 [project]
-name = "docforge"
+name = "doki"
 version = "0.1.0"
 description = "One document engine, many PDF products"
 requires-python = ">=3.13"
@@ -25,7 +25,7 @@ dependencies = [
 ]
 
 [project.scripts]
-docforge = "docforge.cli:main"
+doki = "doki.cli:main"
 
 [dependency-groups]
 dev = [
