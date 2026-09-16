@@ -18,7 +18,10 @@ async def read_upload(upload: UploadFile, magic: bytes | None = None) -> bytes:
 
 async def read_pdf(upload: UploadFile) -> bytes:
     """Read an upload that must be a parseable PDF with at least one page."""
-    data = await read_upload(upload, magic=b"%PDF-")
+    return ensure_pdf(await read_upload(upload, magic=b"%PDF-"))
+
+
+def ensure_pdf(data: bytes) -> bytes:
     if page_count(data) == 0:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "unreadable PDF")
     return data
