@@ -127,7 +127,7 @@ def _mock_extract(pdf: bytes, fields: dict[str, str]) -> list[dict]:
     pages = [p.extract_text() or "" for p in PdfReader(BytesIO(pdf)).pages]
     out = []
     for name in fields:
-        label = re.compile(rf"^\s*{re.escape(name.replace('_', ' '))}\s*[:=]\s*(.+?)\s*$", re.I | re.M)
+        label = re.compile(rf"^\s*{re.escape(name.replace('_', ' '))}\s*[:=]\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
         hit = next(((i + 1, m.group(1)) for i, text in enumerate(pages) if (m := label.search(text))), None)
         out.append({
             "name": name,

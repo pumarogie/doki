@@ -41,11 +41,11 @@ def validate(data: bytes, timeout: float = 120) -> dict:
     with tempfile.TemporaryDirectory() as tmp:
         src = Path(tmp, "invoice.xml")
         src.write_bytes(xml)
-        # ponytail: one JVM per call (~4s). Switch to KoSIT daemon mode (-D) when volume grows.
+        # one JVM per call (~4s). Switch to KoSIT daemon mode (-D) when volume grows.
         # Exit code is non-zero for rejected invoices; the report is the source of truth.
         run([JAVA, "-jar", str(KOSIT_DIR / "validator.jar"),
              "-s", str(KOSIT_DIR / "config" / "scenarios.xml"), "-r", str(KOSIT_DIR / "config"),
-             "-o", tmp, str(src)], timeout=timeout, ok_codes=range(0, 256))
+             "-o", tmp, str(src)], timeout=timeout, ok_codes=range(256))
         report = Path(tmp, "invoice-report.xml")
         if not report.is_file():
             raise ToolError("KoSIT produced no report")
@@ -57,7 +57,7 @@ def _summarize(report_xml: bytes) -> dict:
     scenario = root.find("rep:scenarioMatched/s:scenario/s:name", NS)
     found = {"error": [], "warning": [], "information": []}
     for msg in root.iter(f"{{{NS['rep']}}}message"):
-        found.get(msg.get("level"), found["error"]).append({
+        found.get(msg.get("level") or "error", found["error"]).append({
             "rule": msg.get("code") or "schema",
             "message": " ".join((msg.text or "").split()),
             "location": msg.get("xpathLocation"),

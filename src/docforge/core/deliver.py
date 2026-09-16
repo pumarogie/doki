@@ -21,7 +21,7 @@ def email(to: list[str], subject: str, body: str, filename: str, pdf: bytes) -> 
     msg["Subject"] = subject
     msg.set_content(body)
     msg.add_attachment(pdf, maintype="application", subtype="pdf", filename=filename)
-    host, port = os.environ.get("SMTP_HOST", "localhost"), int(os.environ.get("SMTP_PORT", 25))
+    host, port = os.environ.get("SMTP_HOST", "localhost"), int(os.environ.get("SMTP_PORT", "25"))
     try:
         with smtplib.SMTP(host, port, timeout=30) as smtp:
             if os.environ.get("SMTP_STARTTLS") == "1":
@@ -38,7 +38,7 @@ def check_public_host(host: str) -> None:
     if os.environ.get("DELIVERY_ALLOW_PRIVATE") == "1":
         return
     try:
-        addrs = {info[4][0] for info in socket.getaddrinfo(host, None)}
+        addrs = {str(info[4][0]) for info in socket.getaddrinfo(host, None)}
     except socket.gaierror as e:
         raise DeliveryError("SFTP host does not resolve") from e
     for addr in addrs:
@@ -65,7 +65,10 @@ def sftp(host: str, port: int, username: str, password: str, host_key: str,
             if transport.get_remote_server_key() != expected:
                 raise DeliveryError("SFTP host key does not match")
             transport.auth_password(username, password)
-            with paramiko.SFTPClient.from_transport(transport) as client:
+            client = paramiko.SFTPClient.from_transport(transport)
+            if client is None:
+                raise paramiko.SSHException("could not open SFTP channel")
+            with client:
                 client.putfo(BytesIO(data), remote)
     except paramiko.AuthenticationException as e:
         raise DeliveryError("SFTP login failed") from e
