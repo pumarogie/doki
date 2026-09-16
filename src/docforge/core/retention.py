@@ -13,6 +13,8 @@ USAGE_RETENTION_MONTHS = int(os.environ.get("USAGE_RETENTION_MONTHS", "13"))  # 
 
 def purge(retention_days: int = RETENTION_DAYS, usage_months: int = USAGE_RETENTION_MONTHS) -> dict:
     with connect() as conn:
+        # Idempotency replays only need a day; they reference stored responses, so they go first.
+        conn.execute("DELETE FROM idempotency_key WHERE created_at < now() - interval '24 hours'")
         jobs = conn.execute(
             """DELETE FROM job WHERE status IN ('done', 'failed')
                AND finished_at < now() - make_interval(days => %s)""",
@@ -22,6 +24,7 @@ def purge(retention_days: int = RETENTION_DAYS, usage_months: int = USAGE_RETENT
         shas = [r["sha256"] for r in conn.execute(
             """DELETE FROM file f WHERE f.created_at < now() - make_interval(days => %s)
                AND NOT EXISTS (SELECT 1 FROM job j WHERE j.input_file_id = f.id OR j.output_file_id = f.id)
+               AND NOT EXISTS (SELECT 1 FROM idempotency_key i WHERE i.response_file_id = f.id)
                RETURNING f.sha256""",
             (retention_days,),
         )]
