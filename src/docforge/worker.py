@@ -1,8 +1,9 @@
 import logging
+import os
 import signal
 import time
 
-from docforge import db, logs
+from docforge import db, logs, observability
 from docforge.auth import prune_rate_windows
 from docforge.core import jobs, retention
 from docforge.products import extract, reports  # noqa: F401  (registers job handlers)
@@ -12,6 +13,11 @@ log = logging.getLogger("docforge.worker")
 
 def main(poll_seconds: float = 1.0, schedule_every: float = 20.0, purge_every: float = 3600.0) -> None:
     logs.configure()
+    observability.init_sentry("worker")
+    if port := os.environ.get("WORKER_METRICS_PORT"):
+        from prometheus_client import start_http_server
+
+        start_http_server(int(port))
     stopping = False
 
     def stop(*_):
@@ -30,6 +36,7 @@ def main(poll_seconds: float = 1.0, schedule_every: float = 20.0, purge_every: f
                 if queued := reports.enqueue_due():
                     log.info("queued %d scheduled report(s)", queued)
                 prune_rate_windows()
+                observability.refresh_queue_depth()
                 last_schedule_check = time.monotonic()
             if time.monotonic() - last_purge >= purge_every:
                 retention.purge()
