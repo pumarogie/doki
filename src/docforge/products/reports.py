@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, EmailStr, Field, StringConstraints, field_validator
 
-from docforge.auth import Principal, require_product
+from docforge.auth import Principal, QuotaExceeded, charge, require_product
 from docforge.core import deliver, jobs, render, secrets, storage
 from docforge.core.jobs import PermanentError
 from docforge.db import connect, one
@@ -213,9 +213,8 @@ def run(job: dict) -> dict:
     except deliver.DeliveryError as e:
         raise PermanentError(str(e)) from e
 
-    with connect() as conn:
-        conn.execute(
-            "INSERT INTO usage_event (api_key_id, product, operation, page_count) VALUES (%s, 'reports', 'run_schedule', %s)",
-            (job["api_key_id"], page_count(pdf)),
-        )
+    try:
+        charge(job["api_key_id"], "reports", "run_schedule", page_count(pdf))
+    except QuotaExceeded as e:
+        raise PermanentError("monthly page quota exceeded") from e
     return {"delivered_to": target, "output_file_id": file_id}

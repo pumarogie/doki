@@ -3,7 +3,7 @@ import logging
 
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
 
-from docforge.auth import Principal, require_product
+from docforge.auth import Principal, QuotaExceeded, charge, check_quota, require_product
 from docforge.core import extract as engine
 from docforge.core import jobs, llm, storage
 from docforge.core.jobs import PermanentError
@@ -35,6 +35,7 @@ async def submit(
     pages = page_count(pdf)
     if pages > MAX_PAGES:
         raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, f"PDF has too many pages (max {MAX_PAGES})")
+    check_quota(principal, pages)
     file_id = storage.put(principal.organization_id, pdf, file.filename or "document.pdf", "application/pdf")
     job_id = jobs.enqueue(principal.api_key_id, "extract", "extract",
                           # jsonb reorders object keys, so keep the requested field order as pairs
@@ -76,9 +77,8 @@ def run(job: dict) -> dict:
     except llm.LLMError as e:
         log.warning("job %s: %s", job["id"], e)
         raise PermanentError("the document could not be processed") from e
-    with connect() as conn:
-        conn.execute(
-            "INSERT INTO usage_event (api_key_id, product, operation, page_count) VALUES (%s, 'extract', 'extract', %s)",
-            (job["api_key_id"], params["pages"]),
-        )
+    try:
+        charge(job["api_key_id"], "extract", "extract", params["pages"])
+    except QuotaExceeded as e:
+        raise PermanentError("monthly page quota exceeded") from e
     return result
