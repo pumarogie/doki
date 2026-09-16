@@ -4,3 +4,5 @@ __pycache__/
 .env
 data/
 .pytest_cache/
+vendor/
+.DS_Store
