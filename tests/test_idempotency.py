@@ -1,7 +1,7 @@
 import uuid
 
-from docforge.core import retention
-from docforge.db import connect, one
+from doki.core import retention
+from doki.db import connect, one
 
 BODY = {"engine": "typst", "source": "= Idempotent"}
 
@@ -102,7 +102,7 @@ def test_expired_keys_are_purged(client, key_for):
 
 
 def test_fingerprint_ignores_multipart_boundary():
-    from docforge.idempotency import fingerprint
+    from doki.idempotency import fingerprint
 
     scope = {"method": "POST", "path": "/v1/extract", "query_string": b""}
     a = fingerprint(scope, b"multipart/form-data; boundary=aaa", b"--aaa\r\nx\r\n--aaa--")

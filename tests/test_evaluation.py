@@ -1,6 +1,6 @@
 import pytest
 
-from docforge import evaluation
+from doki import evaluation
 
 
 def test_cases_are_deterministic_and_varied():

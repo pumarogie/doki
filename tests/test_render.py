@@ -45,7 +45,7 @@ def test_broken_template_returns_author_error_without_server_paths(client, key_f
 
 
 def test_slow_template_is_stopped(client, key_for):
-    from docforge.core import render as engine
+    from doki.core import render as engine
 
     with pytest.raises(engine.TemplateError, match="longer than"):
         engine.render("typst", "#for i in range(1000000000) { [x] }", {}, timeout=2)
@@ -72,8 +72,8 @@ def test_template_crud_and_render_by_name(client, key_for):
 
 
 def test_templates_are_isolated_per_organization(client, key_for):
-    from docforge.auth import create_key
-    from docforge.db import connect, one
+    from doki.auth import create_key
+    from doki.db import connect, one
 
     tid = client.post("/v1/templates", headers=key_for("render"), json={"name": "private", "engine": "typst", "source": TYPST}).json()["id"]
     with connect() as conn:
@@ -101,7 +101,7 @@ def test_requires_render_scope(client, key_for):
 def test_html_renders_reuse_one_browser(client, key_for):
     import time
 
-    from docforge.core.render import chromium
+    from doki.core.render import chromium
 
     headers = key_for("render")
     client.post("/v1/render", headers=headers, json={"engine": "html", "source": "<p>warm-up</p>"})
@@ -118,7 +118,7 @@ def test_html_renders_reuse_one_browser(client, key_for):
 def test_html_render_survives_browser_crash(client, key_for):
     import subprocess
 
-    from docforge.core.render import chromium
+    from doki.core.render import chromium
 
     headers = key_for("render")
     assert client.post("/v1/render", headers=headers, json={"engine": "html", "source": "<p>a</p>"}).status_code == 200
@@ -133,7 +133,7 @@ def test_html_render_survives_browser_crash(client, key_for):
 def test_pool_renders_in_parallel():
     from concurrent.futures import ThreadPoolExecutor
 
-    from docforge.core import render as engine
+    from doki.core import render as engine
 
     heavy = "<table>" + "".join(f"<tr><td>{i}</td><td>{'x' * 50}</td></tr>" for i in range(3000)) + "</table>"
     before = sum(w.served for w in engine.chromium.workers)
@@ -146,7 +146,7 @@ def test_pool_renders_in_parallel():
 
 
 def test_typst_workers_are_reused():
-    from docforge.core import render as engine
+    from doki.core import render as engine
 
     engine.render("typst", "= warm", {})
     pids = {p.pid() for p in engine.typst_pool.processes} - {None}
@@ -159,7 +159,7 @@ def test_typst_worker_restarts_after_timeout_and_crash():
     import os
     import signal
 
-    from docforge.core import render as engine
+    from doki.core import render as engine
 
     with pytest.raises(engine.TemplateError, match="longer than"):
         engine.render("typst", "#for i in range(1000000000) { [x] }", {}, timeout=1)
@@ -172,7 +172,7 @@ def test_typst_worker_restarts_after_timeout_and_crash():
 
 
 def test_typst_worker_recycles_after_max_renders(monkeypatch):
-    from docforge.core import render as engine
+    from doki.core import render as engine
 
     monkeypatch.setattr(engine._TypstProcess, "MAX_RENDERS", 2)
     proc = engine.typst_pool.processes[0]
@@ -186,7 +186,7 @@ def test_typst_worker_recycles_after_max_renders(monkeypatch):
 def test_typst_is_fast_when_warm():
     import time
 
-    from docforge.core import render as engine
+    from doki.core import render as engine
 
     engine.render("typst", "= warm", {})
     started = time.monotonic()

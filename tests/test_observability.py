@@ -1,5 +1,5 @@
-from docforge import observability
-from docforge.core import jobs
+from doki import observability
+from doki.core import jobs
 
 
 def _metrics(client, monkeypatch, token="scrape-me"):
@@ -24,11 +24,11 @@ def test_requests_counted_by_route_template(client, key_for, monkeypatch):
     body = _metrics(client, monkeypatch).text
     assert 'route="/v1/templates/{template_id}"' in body
     assert "/v1/templates/123456" not in body
-    assert "docforge_jobs_queued" in body
+    assert "doki_jobs_queued" in body
 
 
 def test_job_outcomes_recorded(client, key_for):
-    from docforge.db import connect, one
+    from doki.db import connect, one
 
     key_for("extract")
     with connect() as conn:

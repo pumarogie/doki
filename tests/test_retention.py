@@ -1,5 +1,5 @@
-from docforge.core import blobs, jobs, retention, storage
-from docforge.db import connect, one
+from doki.core import blobs, jobs, retention, storage
+from doki.db import connect, one
 
 
 def _age(table: str, column: str, row_id: int, days: int) -> None:

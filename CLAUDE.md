@@ -1,7 +1,7 @@
-# docforge — agent rules
+# doki — agent rules
 
-One core document engine (`src/docforge/core/`, no HTTP) + one thin router per product
-(`src/docforge/products/`). Postgres is state + job queue. See README for layout and run steps.
+One core document engine (`src/doki/core/`, no HTTP) + one thin router per product
+(`src/doki/products/`). Postgres is state + job queue. See README for layout and run steps.
 
 ## Done = all four green (run before claiming done or committing)
 
@@ -24,8 +24,8 @@ Compose must keep `target: runtime`.
 - Query arguments must be `LiteralString`, `bytes` or `psycopg.sql`. No f-strings with user data — only constant
   fragments (e.g. column lists). File contents → `path.read_bytes()`.
 - `jsonb` does not keep object key order. Store ordered data as lists (e.g. `[[name, desc], ...]`).
-- Schema change = new `migrations/NNN_*.sql`, never edit an applied one. Migrations run as `docforge_owner`
-  (`docforge migrate --url …`); the app connects as `docforge_app` (DML only) — never grant it DDL.
+- Schema change = new `migrations/NNN_*.sql`, never edit an applied one. Migrations run as `doki_owner`
+  (`doki migrate --url …`); the app connects as `doki_app` (DML only) — never grant it DDL.
 - 3NF: no column reachable through another FK (e.g. no `organization_id` next to `api_key_id`). Singular table names.
 - Every FK gets an index (Postgres doesn't add one); every query path gets one, checked with `EXPLAIN`.
 - Tenant isolation: every read/update/delete filters by the caller's organization (directly or via `api_key`).

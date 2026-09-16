@@ -14,6 +14,39 @@ jobs:
       - run: uv run ruff check src tests
       - run: uv run pyright src tests
 
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Audit locked runtime dependencies
+        run: |
+          uv export --frozen --no-dev --no-emit-project > requirements.lock
+          uvx pip-audit --strict -r requirements.lock --disable-pip
+
+  image-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build runtime image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: runtime
+          tags: doki:scan
+          load: true
+          cache-from: type=gha
+      - name: Scan image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+        with:
+          image-ref: doki:scan
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+          exit-code: "1"
+
   tests:
     runs-on: ubuntu-latest
     services:
@@ -28,9 +61,9 @@ jobs:
       PGHOST: localhost
       PGPASSWORD: ci-superuser
       POSTGRES_USER: postgres
-      DOCFORGE_DB: docforge_test
-      DOCFORGE_OWNER_PASSWORD: ci-owner
-      DOCFORGE_APP_PASSWORD: ci-app
+      DOKI_DB: doki_test
+      DOKI_OWNER_PASSWORD: ci-owner
+      DOKI_APP_PASSWORD: ci-app
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -39,7 +72,7 @@ jobs:
         with:
           context: .
           target: test
-          tags: docforge:test
+          tags: doki:test
           load: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -48,6 +81,6 @@ jobs:
       - name: Run tests
         run: >
           docker run --rm --network host
-          -e DATABASE_URL=postgresql://docforge_app:ci-app@localhost:5432/docforge_test
-          -e TEST_OWNER_DATABASE_URL=postgresql://docforge_owner:ci-owner@localhost:5432/docforge_test
-          docforge:test
+          -e DATABASE_URL=postgresql://doki_app:ci-app@localhost:5432/doki_test
+          -e TEST_OWNER_DATABASE_URL=postgresql://doki_owner:ci-owner@localhost:5432/doki_test
+          doki:test

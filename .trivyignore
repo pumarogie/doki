@@ -1,0 +1,6 @@
+# jackson-core / jackson-databind 2.21.1 are bundled inside veraPDF 1.30.2 (latest release, no fixed build).
+# The CVEs need attacker-controlled JSON to be deserialized; veraPDF only serialises its own reports.
+# Re-check when veraPDF ships a new release.
+GHSA-r7wm-3cxj-wff9 exp:2026-11-16
+CVE-2026-54512 exp:2026-11-16
+CVE-2026-54513 exp:2026-11-16

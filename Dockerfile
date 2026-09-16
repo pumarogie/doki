@@ -12,34 +12,38 @@ ENV PYTHONUNBUFFERED=1 \
     PATH=/app/.venv/bin:$PATH
 
 RUN apt-get update \
+ && apt-get upgrade -y \
  && apt-get install -y --no-install-recommends ghostscript openjdk-17-jre-headless curl unzip ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=ghcr.io/astral-sh/uv:0.9 /uv /usr/local/bin/uv
+# The app runs from uv's venv; the base image's pip (and the libraries it vendors) is never used.
+RUN python -m pip uninstall -y pip
 COPY --from=verapdf /opt/verapdf /opt/verapdf
 RUN ln -s /opt/verapdf/verapdf /usr/local/bin/verapdf
 
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
+# The uv cache stays in a build cache mount, not in the image.
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev --no-install-project
 RUN playwright install --with-deps --only-shell chromium
 COPY scripts ./scripts
 RUN ./scripts/fetch-kosit.sh "$KOSIT_DIR"
 
 COPY migrations ./migrations
 COPY src ./src
-RUN uv sync --frozen --no-dev
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev
 
 RUN useradd --system --uid 10001 app && mkdir -p /data/files && chown app /data/files
 USER app
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s CMD curl -fsS http://localhost:8000/health || exit 1
-CMD ["uvicorn", "docforge.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--no-access-log"]
+CMD ["uvicorn", "doki.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--no-access-log"]
 
 # CI image: runtime + dev dependencies + tests. Build with --target test.
 FROM runtime AS test
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends procps && rm -rf /var/lib/apt/lists/*
-RUN uv sync --frozen
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen
 COPY tests ./tests
 RUN chown -R app /app
 USER app
