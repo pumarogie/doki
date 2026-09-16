@@ -1,10 +1,14 @@
 import os
 import tempfile
 
+from cryptography.fernet import Fernet
+
 os.environ.setdefault("DATABASE_URL", "postgresql://docforge_app@localhost/docforge_test")
 os.environ["LLM_PROVIDER"] = "mock"
+os.environ["DELIVERY_ALLOW_PRIVATE"] = "1"
+os.environ.setdefault("DOCFORGE_SECRET_KEY", Fernet.generate_key().decode())
 os.environ.setdefault("STORAGE_DIR", tempfile.mkdtemp(prefix="docforge-test-"))
-OWNER_URL =os.environ.setdefault("TEST_OWNER_DATABASE_URL", "postgresql://docforge_owner@localhost/docforge_test")
+OWNER_URL = os.environ.setdefault("TEST_OWNER_DATABASE_URL", "postgresql://docforge_owner@localhost/docforge_test")
 
 import psycopg
 import pytest
