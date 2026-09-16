@@ -2,7 +2,7 @@ import logging
 import signal
 import time
 
-from docforge import db
+from docforge import db, logs
 from docforge.auth import prune_rate_windows
 from docforge.core import jobs, retention
 from docforge.products import extract, reports  # noqa: F401  (registers job handlers)
@@ -11,7 +11,7 @@ log = logging.getLogger("docforge.worker")
 
 
 def main(poll_seconds: float = 1.0, schedule_every: float = 20.0, purge_every: float = 3600.0) -> None:
-    logging.basicConfig(level=logging.INFO)
+    logs.configure()
     stopping = False
 
     def stop(*_):
