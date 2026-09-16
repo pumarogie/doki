@@ -1,6 +1,5 @@
 import logging
 import subprocess
-import time
 from collections.abc import Sequence
 from pathlib import PurePath
 
@@ -16,15 +15,13 @@ def run(
 ) -> subprocess.CompletedProcess[bytes]:
     from docforge.observability import TOOL_SECONDS
 
-    started = time.perf_counter()
     try:
-        proc = subprocess.run(list(args), input=stdin, capture_output=True, timeout=timeout, check=False)
+        with TOOL_SECONDS.labels(PurePath(args[0]).name).time():
+            proc = subprocess.run(list(args), input=stdin, capture_output=True, timeout=timeout, check=False)
     except FileNotFoundError as e:
         raise ToolError(f"binary not found: {args[0]}") from e
     except subprocess.TimeoutExpired as e:
         raise ToolError(f"{args[0]} timed out after {timeout}s") from e
-    finally:
-        TOOL_SECONDS.labels(PurePath(args[0]).name).observe(time.perf_counter() - started)
     if proc.returncode not in ok_codes:
         raise ToolError(f"{args[0]} exited {proc.returncode}: {proc.stderr[-2000:].decode(errors='replace')}")
     return proc

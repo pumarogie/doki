@@ -32,9 +32,9 @@ def render(engine: str, source: str, data: dict, pdfa: bool = False, timeout: fl
 
 def _typst(source: str, data: dict, pdfa: bool, timeout: float) -> bytes:
     payload = json.dumps({"source": source, "data": data, "pdfa": pdfa}).encode()
-    from docforge.observability import timed
+    from docforge.observability import TOOL_SECONDS
 
-    with timed("typst"):
+    with TOOL_SECONDS.labels("typst").time():
         status, body = typst_pool.compile(payload, timeout)
     if status == 0:
         return body
@@ -131,9 +131,9 @@ def _html(source: str, data: dict, timeout: float) -> bytes:
         html = ImmutableSandboxedEnvironment(autoescape=True).from_string(source).render(data=data)
     except JinjaError as e:
         raise TemplateError(str(e)) from e
-    from docforge.observability import timed
+    from docforge.observability import TOOL_SECONDS
 
-    with timed("chromium"):
+    with TOOL_SECONDS.labels("chromium").time():
         return chromium.render(html, timeout)
 
 
