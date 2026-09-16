@@ -49,3 +49,32 @@ def test_key_is_stored_hashed(key_for):
     with db.connect() as conn:
         hashes = [r["key_hash"] for r in conn.execute("SELECT key_hash FROM api_key")]
     assert key not in hashes
+
+
+def test_rate_limit_returns_429_with_retry_after(client, key_for):
+    headers = key_for("pdfa", rate_per_minute=3)
+    for _ in range(3):
+        assert client.get("/_test/pdfa", headers=headers).status_code == 200
+    r = client.get("/_test/pdfa", headers=headers)
+    assert r.status_code == 429
+    assert 1 <= int(r.headers["Retry-After"]) <= 60
+    # a different key is unaffected
+    assert client.get("/_test/pdfa", headers=key_for("pdfa")).status_code == 200
+
+
+def test_monthly_page_quota_gives_402(client, key_for):
+    headers = key_for("pdfa", monthly_pages=5)
+    assert client.get("/_test/pdfa", headers=headers).status_code == 200  # 3 pages used
+    r = client.get("/_test/pdfa", headers=headers)  # would be 6 > 5
+    assert r.status_code == 402
+    assert client.get("/v1/usage", headers=headers).json()["usage"][0]["pages"] == 3
+
+
+def test_revoke_key_by_prefix(client, key_for):
+    from docforge.auth import revoke_key
+
+    headers = key_for("pdfa")
+    prefix = headers["Authorization"].split("_")[1]
+    assert revoke_key(prefix) is True
+    assert revoke_key(prefix) is False
+    assert client.get("/_test/pdfa", headers=headers).status_code == 401

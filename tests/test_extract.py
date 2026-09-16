@@ -148,3 +148,14 @@ def test_jobs_and_files_are_isolated_per_organization(client, key_for, invoice_p
 
 def test_requires_extract_scope(client, key_for, invoice_pdf):
     assert _submit(client, key_for("render"), invoice_pdf).status_code == 403
+
+
+def test_submit_over_quota_is_rejected_before_work(client, key_for, invoice_pdf):
+    headers = key_for("extract", monthly_pages=1)
+    first = _submit(client, headers, invoice_pdf)
+    assert first.status_code == 202
+    jobs.run_once()  # charges 1 page
+    assert _submit(client, headers, invoice_pdf).status_code == 402
+    with connect() as conn:
+        queued = one(conn, "SELECT count(*) AS n FROM job WHERE status = 'queued'")["n"]
+    assert queued == 0

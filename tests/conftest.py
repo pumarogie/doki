@@ -42,6 +42,6 @@ def org_id(client):
 
 @pytest.fixture
 def key_for(org_id):
-    def make(*products: str) -> dict:
-        return {"Authorization": f"Bearer {create_key(org_id, list(products))}"}
+    def make(*products: str, rate_per_minute: int = 60, monthly_pages: int | None = None) -> dict:
+        return {"Authorization": f"Bearer {create_key(org_id, list(products), rate_per_minute, monthly_pages)}"}
     return make
