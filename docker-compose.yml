@@ -2,6 +2,7 @@
 x-app: &app
   build:
     context: .
+    target: runtime
     network: host  # BuildKit's default network fails DNS on some Docker Desktop setups
   image: docforge:local
   environment: &app-env

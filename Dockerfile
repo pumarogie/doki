@@ -2,7 +2,7 @@
 # 1.30.2
 FROM --platform=linux/amd64 verapdf/cli@sha256:d5ee329657cf9bc4b2400392dd54c7d0a0ce9980ff6fa2da5590eebeec007cdb AS verapdf
 
-FROM python:3.13-slim-bookworm
+FROM python:3.13-slim-bookworm AS runtime
 ENV PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -34,3 +34,13 @@ USER app
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s CMD curl -fsS http://localhost:8000/health || exit 1
 CMD ["uvicorn", "docforge.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+
+# CI image: runtime + dev dependencies + tests. Build with --target test.
+FROM runtime AS test
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends procps && rm -rf /var/lib/apt/lists/*
+RUN uv sync --frozen
+COPY tests ./tests
+RUN chown -R app /app
+USER app
+CMD ["pytest", "-q"]
