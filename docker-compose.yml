@@ -19,6 +19,9 @@ x-app: &app
     AWS_ACCESS_KEY_ID: docforge
     AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?set in .env}
     AWS_DEFAULT_REGION: us-east-1
+    SENTRY_DSN: ${SENTRY_DSN:-}
+    METRICS_TOKEN: ${METRICS_TOKEN:-}
+    WORKER_METRICS_PORT: "9100"
     SMTP_FROM: ${SMTP_FROM:-reports@docforge.local}
   restart: unless-stopped
 
