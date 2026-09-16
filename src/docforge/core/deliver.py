@@ -40,11 +40,11 @@ def check_public_host(host: str) -> None:
     try:
         addrs = {str(info[4][0]) for info in socket.getaddrinfo(host, None)}
     except socket.gaierror as e:
-        raise DeliveryError("SFTP host does not resolve") from e
+        raise DeliveryError("target host does not resolve") from e
     for addr in addrs:
         ip = ipaddress.ip_address(addr.split("%")[0])
         if not ip.is_global:
-            raise DeliveryError("SFTP host must be a public address")
+            raise DeliveryError("target host must be a public address")
 
 
 def sftp(host: str, port: int, username: str, password: str, host_key: str,
