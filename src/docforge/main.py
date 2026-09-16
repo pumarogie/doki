@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 
 from docforge import db
 from docforge.auth import Principal, any_key
+from docforge.products import pdfa
 
 log = logging.getLogger("docforge")
 
@@ -20,6 +21,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="docforge", lifespan=lifespan)
+app.include_router(pdfa.router)
 
 
 @app.exception_handler(Exception)
