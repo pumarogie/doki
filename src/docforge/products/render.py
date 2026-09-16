@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, StringConstraints
 
 from docforge.auth import Principal, record_usage, require_product
 from docforge.core import render as engine
+from docforge.core import watermark
 from docforge.core.tools import ToolError
 from docforge.db import connect
 from docforge.uploads import page_count
@@ -48,6 +49,7 @@ async def render(body: RenderIn, principal: Principal = Depends(guard)):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "pdfa output is only supported for typst templates")
     try:
         pdf = await run_in_threadpool(engine.render, engine_name, source, body.data, body.pdfa)
+        pdf = await run_in_threadpool(watermark.stamp, pdf)
     except engine.TemplateError as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, {"template_error": str(e)[:2000]})
     except ToolError:

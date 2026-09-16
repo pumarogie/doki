@@ -9,7 +9,7 @@ from psycopg.types.json import Jsonb
 from pydantic import BaseModel, EmailStr, Field, StringConstraints, field_validator
 
 from docforge.auth import Principal, QuotaExceeded, charge, require_product
-from docforge.core import deliver, jobs, render, secrets, storage
+from docforge.core import deliver, jobs, render, secrets, storage, watermark
 from docforge.core.jobs import PermanentError
 from docforge.db import connect, one
 from docforge.uploads import page_count
@@ -196,7 +196,7 @@ def run(job: dict) -> dict:
     if s["revoked_at"] is not None:
         raise PermanentError("the API key that owns this schedule was revoked")
     try:
-        pdf = render.render(s["engine"], s["source"], s["data"])
+        pdf = watermark.stamp(render.render(s["engine"], s["source"], s["data"]))
     except render.TemplateError as e:
         raise PermanentError(f"template error: {str(e)[:500]}") from e
 

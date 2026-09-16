@@ -5,7 +5,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
 
 from docforge.auth import Principal, record_usage, require_product
-from docforge.core import pdfa
+from docforge.core import pdfa, watermark
 from docforge.core.tools import ToolError
 from docforge.uploads import page_count, read_pdf
 
@@ -18,6 +18,7 @@ async def convert(file: UploadFile, level: Literal["2b", "3b"] = Form("2b"), pri
     pdf = await read_pdf(file)
     try:
         out = await run_in_threadpool(pdfa.convert, pdf, level)
+        out = await run_in_threadpool(watermark.stamp, out)
     except ToolError:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "could not convert this PDF")
     record_usage(principal, "pdfa", "convert", page_count(out))

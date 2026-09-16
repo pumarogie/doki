@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from docforge import logs
 from docforge.db import connect, one
 
 PRODUCTS = ("pdfa", "einvoice", "render", "extract", "reports")
@@ -115,8 +116,9 @@ def charge(api_key_id: int, product: str, operation: str, page_count: int = 0) -
         if quota is not None and pages_used_this_month(conn, api_key_id) + page_count > quota:
             raise QuotaExceeded
         conn.execute(
-            "INSERT INTO usage_event (api_key_id, product, operation, page_count) VALUES (%s, %s, %s, %s)",
-            (api_key_id, product, operation, page_count),
+            """INSERT INTO usage_event (api_key_id, product, operation, page_count, request_id)
+               VALUES (%s, %s, %s, %s, %s)""",
+            (api_key_id, product, operation, page_count, logs.request_id.get()),
         )
 
 
@@ -135,6 +137,17 @@ def check_quota(principal: Principal, page_count: int) -> None:
     with connect() as conn:
         if pages_used_this_month(conn, principal.api_key_id) + page_count > principal.monthly_pages:
             raise HTTPException(status.HTTP_402_PAYMENT_REQUIRED, "monthly page quota exceeded")
+
+
+def trace(request_id: str) -> dict | None:
+    """Which key produced a document stamped with this trace id."""
+    with connect() as conn:
+        return conn.execute(
+            """SELECT u.request_id, u.product, u.operation, u.created_at, k.prefix, k.organization_id, o.name AS organization
+               FROM usage_event u JOIN api_key k ON k.id = u.api_key_id JOIN organization o ON o.id = k.organization_id
+               WHERE u.request_id = %s ORDER BY u.created_at LIMIT 1""",
+            (request_id,),
+        ).fetchone()
 
 
 def prune_rate_windows() -> int:
