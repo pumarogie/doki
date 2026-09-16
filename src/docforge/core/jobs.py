@@ -3,6 +3,7 @@ from collections.abc import Callable
 
 from psycopg.types.json import Jsonb
 
+from docforge import logs
 from docforge.db import connect, one
 
 log = logging.getLogger(__name__)
@@ -83,6 +84,7 @@ def run_once() -> bool:
     if job is None:
         return False
     fn = HANDLERS.get((job["product"], job["operation"]))
+    token = logs.request_id.set(f"job-{job['id']}")
     try:
         if fn is None:
             raise PermanentError("unsupported operation")
@@ -95,6 +97,8 @@ def run_once() -> bool:
         fail(job, "processing failed", permanent=False)
     else:
         finish(job["id"], result, output_file_id=result.pop("output_file_id", None))
+    finally:
+        logs.request_id.reset(token)
     return True
 
 
