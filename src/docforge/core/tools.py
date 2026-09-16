@@ -9,9 +9,11 @@ class ToolError(RuntimeError):
     """An external binary failed. The message is for logs, never for clients."""
 
 
-def run(args: Sequence[str], timeout: float = 120, ok_codes: Sequence[int] = (0,)) -> subprocess.CompletedProcess[bytes]:
+def run(
+    args: Sequence[str], timeout: float = 120, ok_codes: Sequence[int] = (0,), stdin: bytes | None = None
+) -> subprocess.CompletedProcess[bytes]:
     try:
-        proc = subprocess.run(list(args), capture_output=True, timeout=timeout, check=False)
+        proc = subprocess.run(list(args), input=stdin, capture_output=True, timeout=timeout, check=False)
     except FileNotFoundError as e:
         raise ToolError(f"binary not found: {args[0]}") from e
     except subprocess.TimeoutExpired as e:
