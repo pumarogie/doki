@@ -1,0 +1,3 @@
+valid_cii.xml and valid_ubl.xml are 01.01a-INVOICE_uncefact.xml and 01.01a-INVOICE_ubl.xml
+from the XRechnung test suite (https://github.com/itplr-kosit/xrechnung-testsuite, release v2026-08-31),
+licensed under the Apache License 2.0.
