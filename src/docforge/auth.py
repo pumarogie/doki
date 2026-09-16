@@ -70,20 +70,37 @@ def _principal(creds: HTTPAuthorizationCredentials | None = Depends(bearer)) -> 
         ).fetchone()
         if row is None:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid API key")
-        window = one(
-            conn,
-            """INSERT INTO rate_window (api_key_id, window_start, hits)
-               VALUES (%s, date_trunc('minute', now()), 1)
-               ON CONFLICT (api_key_id, window_start) DO UPDATE SET hits = rate_window.hits + 1
-               RETURNING hits, extract(epoch FROM window_start + interval '1 minute' - now())::int AS retry_after""",
-            (row["id"],),
-        )
-    if window["hits"] > row["rate_per_minute"]:
+        retry_after = _take_token(conn, row["id"], row["rate_per_minute"])
+    if retry_after is not None:
         raise HTTPException(
             status.HTTP_429_TOO_MANY_REQUESTS, "rate limit exceeded",
-            headers={"Retry-After": str(max(1, window["retry_after"]))},
+            headers={"Retry-After": str(retry_after)},
         )
     return Principal(row["id"], row["organization_id"], frozenset(row["products"]), row["rate_per_minute"], row["monthly_pages"])
+
+
+def _take_token(conn, api_key_id: int, rate_per_minute: int) -> int | None:
+    """GCRA token bucket: `rate_per_minute` requests per minute, bursts of up to `rate_per_minute`.
+
+    Returns None when the request is allowed, else the seconds to wait. One atomic statement per request.
+    """
+    row = one(
+        conn,
+        """WITH params AS (SELECT make_interval(secs => 60.0 / %(rate)s) AS emission,
+                                  interval '60 seconds' AS burst),
+           cur AS (SELECT greatest(coalesce((SELECT tat FROM rate_limit_state WHERE api_key_id = %(key)s
+                                             FOR UPDATE), now()), now()) AS tat),
+           decision AS (SELECT cur.tat + params.emission AS new_tat,
+                               cur.tat + params.emission - now() <= params.burst AS allowed,
+                               cur.tat + params.emission - params.burst - now() AS wait
+                        FROM cur, params),
+           upsert AS (INSERT INTO rate_limit_state (api_key_id, tat)
+                      SELECT %(key)s, new_tat FROM decision WHERE allowed
+                      ON CONFLICT (api_key_id) DO UPDATE SET tat = excluded.tat)
+           SELECT allowed, ceil(extract(epoch FROM wait))::int AS retry_after FROM decision""",
+        {"rate": rate_per_minute, "key": api_key_id},
+    )
+    return None if row["allowed"] else max(1, row["retry_after"])
 
 
 def require_product(product: str):
@@ -150,6 +167,3 @@ def trace(request_id: str) -> dict | None:
         ).fetchone()
 
 
-def prune_rate_windows() -> int:
-    with connect() as conn:
-        return conn.execute("DELETE FROM rate_window WHERE window_start < now() - interval '1 hour'").rowcount
