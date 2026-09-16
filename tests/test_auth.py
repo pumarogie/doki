@@ -4,9 +4,11 @@ from docforge import db
 from docforge.auth import Principal, record_usage, require_product
 from docforge.main import app
 
+pdfa_guard = require_product("pdfa")
+
 
 @app.get("/_test/pdfa")
-def _probe(principal: Principal = Depends(require_product("pdfa"))):
+def _probe(principal: Principal = Depends(pdfa_guard)):
     record_usage(principal, "pdfa", "probe", page_count=3)
     return {"ok": True}
 

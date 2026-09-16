@@ -6,7 +6,7 @@ import pytest
 
 from docforge.core import jobs, llm
 from docforge.core.extract import SCHEMAS
-from docforge.db import connect
+from docforge.db import connect, one
 
 pytestmark = pytest.mark.skipif(not shutil.which("gs"), reason="needs ghostscript to build fixture PDFs")
 
@@ -98,6 +98,7 @@ def test_transient_failure_retries_then_fails(client, key_for, invoice_pdf, monk
     headers = key_for("extract")
     job_id = _submit(client, headers, invoice_pdf).json()["job_id"]
 
+    job: dict = {}
     for attempt in range(1, jobs.MAX_ATTEMPTS + 1):
         with connect() as conn:  # skip the backoff wait
             conn.execute("UPDATE job SET run_after = now() WHERE id = %s", (job_id,))
@@ -137,8 +138,8 @@ def test_jobs_and_files_are_isolated_per_organization(client, key_for, invoice_p
     job_id = _submit(client, headers, invoice_pdf).json()["job_id"]
     jobs.run_once()
     with connect() as conn:
-        file_id = conn.execute("SELECT input_file_id FROM job WHERE id = %s", (job_id,)).fetchone()["input_file_id"]
-        other_org = conn.execute("INSERT INTO organization (name) VALUES ('intruder') RETURNING id").fetchone()["id"]
+        file_id = one(conn, "SELECT input_file_id FROM job WHERE id = %s", (job_id,))["input_file_id"]
+        other_org = one(conn, "INSERT INTO organization (name) VALUES ('intruder') RETURNING id")["id"]
     assert client.get(f"/v1/files/{file_id}", headers=headers).content == invoice_pdf
     other = {"Authorization": f"Bearer {create_key(other_org, ['extract'])}"}
     assert client.get(f"/v1/jobs/{job_id}", headers=other).status_code == 404

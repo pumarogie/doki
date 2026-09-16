@@ -8,7 +8,7 @@ import pytest
 from aiosmtpd.controller import Controller
 
 from docforge.core import deliver, jobs
-from docforge.db import connect
+from docforge.db import connect, one
 from docforge.products import reports
 
 TYPST = '#let d = json(bytes(sys.inputs.data))\n= Report #d.period'
@@ -83,7 +83,7 @@ def test_email_schedule_runs_when_due(client, org_id, key_for, template_id, smtp
     assert msg.rcpt_tos == ["cfo@example.com"] and b"application/pdf" in msg.content
 
     with connect() as conn:
-        job = conn.execute("SELECT status, result, output_file_id FROM job WHERE product = 'reports' ORDER BY id DESC LIMIT 1").fetchone()
+        job = one(conn, "SELECT status, result, output_file_id FROM job WHERE product = 'reports' ORDER BY id DESC LIMIT 1")
     assert job["status"] == "done" and job["result"]["delivered_to"] == "cfo@example.com"
     pdf = client.get(f"/v1/files/{job['output_file_id']}", headers=headers)
     assert pdf.content.startswith(b"%PDF-")
@@ -107,7 +107,7 @@ def test_sftp_password_is_encrypted_and_never_returned(client, key_for, template
     assert "hunter2" not in r.text and "password" not in r.json()["delivery"]
     assert "hunter2" not in client.get("/v1/schedules", headers=headers).text
     with connect() as conn:
-        stored = conn.execute("SELECT delivery::text AS d FROM schedule WHERE id = %s", (r.json()["id"],)).fetchone()["d"]
+        stored = one(conn, "SELECT delivery::text AS d FROM schedule WHERE id = %s", (r.json()["id"],))["d"]
     assert "hunter2" not in stored and "password_enc" in stored
 
 
@@ -147,7 +147,7 @@ def test_schedule_crud_and_isolation(client, key_for, template_id):
     updated = client.put(f"/v1/schedules/{sid}", headers=headers, json=_schedule(template_id, name="weekly", cron="0 8 * * 1"))
     assert updated.json()["name"] == "weekly"
     with connect() as conn:
-        other_org = conn.execute("INSERT INTO organization (name) VALUES ('snoop') RETURNING id").fetchone()["id"]
+        other_org = one(conn, "INSERT INTO organization (name) VALUES ('snoop') RETURNING id")["id"]
     other = {"Authorization": f"Bearer {create_key(other_org, ['reports'])}"}
     for method, path in [("get", f"/v1/schedules/{sid}"), ("delete", f"/v1/schedules/{sid}"), ("post", f"/v1/schedules/{sid}/run")]:
         assert getattr(client, method)(path, headers=other).status_code == 404
@@ -169,7 +169,7 @@ def _free_port() -> int:
 
 @pytest.fixture(scope="module")
 def sftp_server():
-    if not shutil.which("docker") or subprocess.run(["docker", "info"], capture_output=True).returncode != 0:
+    if not shutil.which("docker") or subprocess.run(["docker", "info"], capture_output=True, check=False).returncode != 0:
         pytest.skip("needs docker")
     port = _free_port()
     name = f"docforge-sftp-{uuid.uuid4().hex[:8]}"
@@ -178,7 +178,7 @@ def sftp_server():
     try:
         host_key = ""
         for _ in range(60):
-            scan = subprocess.run(["ssh-keyscan", "-t", "ed25519", "-p", str(port), "127.0.0.1"], capture_output=True, text=True)
+            scan = subprocess.run(["ssh-keyscan", "-t", "ed25519", "-p", str(port), "127.0.0.1"], capture_output=True, text=True, check=False)
             line = next((ln for ln in scan.stdout.splitlines() if not ln.startswith("#") and "ssh-ed25519" in ln), "")
             if line:
                 host_key = " ".join(line.split()[1:3])
@@ -188,7 +188,7 @@ def sftp_server():
             pytest.skip("sftp container did not start")
         yield {"port": port, "host_key": host_key, "name": name}
     finally:
-        subprocess.run(["docker", "rm", "-f", name], capture_output=True)
+        subprocess.run(["docker", "rm", "-f", name], capture_output=True, check=False)
 
 
 def test_sftp_delivery_end_to_end(client, key_for, template_id, sftp_server):
@@ -200,7 +200,7 @@ def test_sftp_delivery_end_to_end(client, key_for, template_id, sftp_server):
     assert jobs.run_once()
     job = client.get(f"/v1/jobs/{job_id}", headers=headers).json()
     assert job["status"] == "done", job
-    listing = subprocess.run(["docker", "exec", sftp_server["name"], "ls", "/home/user/upload"], capture_output=True, text=True).stdout
+    listing = subprocess.run(["docker", "exec", sftp_server["name"], "ls", "/home/user/upload"], capture_output=True, text=True, check=True).stdout
     assert "sftp-report-" in listing and listing.strip().endswith(".pdf")
 
 

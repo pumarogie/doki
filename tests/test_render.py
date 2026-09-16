@@ -73,11 +73,11 @@ def test_template_crud_and_render_by_name(client, key_for):
 
 def test_templates_are_isolated_per_organization(client, key_for):
     from docforge.auth import create_key
-    from docforge.db import connect
+    from docforge.db import connect, one
 
     tid = client.post("/v1/templates", headers=key_for("render"), json={"name": "private", "engine": "typst", "source": TYPST}).json()["id"]
     with connect() as conn:
-        other_org = conn.execute("INSERT INTO organization (name) VALUES ('other') RETURNING id").fetchone()["id"]
+        other_org = one(conn, "INSERT INTO organization (name) VALUES ('other') RETURNING id")["id"]
     other = {"Authorization": f"Bearer {create_key(other_org, ['render'])}"}
     assert client.get(f"/v1/templates/{tid}", headers=other).status_code == 404
     assert client.post("/v1/render", headers=other, json={"template_id": tid}).status_code == 404

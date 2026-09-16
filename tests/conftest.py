@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 
 from docforge import db
 from docforge.auth import create_key
+from docforge.db import one
 from docforge.main import app
 
 
@@ -36,7 +37,7 @@ def client(fresh_schema):
 @pytest.fixture
 def org_id(client):
     with db.connect() as conn:
-        return conn.execute("INSERT INTO organization (name) VALUES ('test') RETURNING id").fetchone()["id"]
+        return one(conn, "INSERT INTO organization (name) VALUES ('test') RETURNING id")["id"]
 
 
 @pytest.fixture
