@@ -1,5 +1,7 @@
 import os
 import tempfile
+import urllib.error
+import urllib.request
 import xml.etree.ElementTree as ET
 from io import BytesIO
 from pathlib import Path
@@ -38,10 +40,33 @@ def validate(data: bytes, timeout: float = 120) -> dict:
     """Validate an XRechnung/EN16931 invoice (UBL or CII XML, or a PDF with embedded XML) with KoSIT."""
     source = "pdf" if data.lstrip().startswith(b"%PDF-") else "xml"
     xml = embedded_xml(data) if source == "pdf" else data
+    daemon = os.environ.get("KOSIT_URL")
+    report = _via_daemon(daemon, xml, timeout) if daemon else _via_cli(xml, timeout)
+    return {"source": source, **_summarize(report)}
+
+
+def _via_daemon(url: str, xml: bytes, timeout: float) -> bytes:
+    """KoSIT daemon mode: POST the XML, get the same report XML the CLI writes. ~50ms instead of ~4s."""
+    req = urllib.request.Request(url.rstrip("/") + "/", data=xml, method="POST",
+                                 headers={"Content-Type": "application/xml"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.read()
+    except urllib.error.HTTPError as e:
+        # The daemon answers 406 for rejected invoices but still returns the report.
+        body = e.read()
+        if e.code in (406, 422) and body.lstrip().startswith(b"<"):
+            return body
+        raise ToolError(f"KoSIT daemon returned HTTP {e.code}") from e
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        raise ToolError(f"KoSIT daemon unreachable: {e}") from e
+
+
+def _via_cli(xml: bytes, timeout: float) -> bytes:
+    """Fallback for local development without the daemon: one JVM per call."""
     with tempfile.TemporaryDirectory() as tmp:
         src = Path(tmp, "invoice.xml")
         src.write_bytes(xml)
-        # one JVM per call (~4s). Switch to KoSIT daemon mode (-D) when volume grows.
         # Exit code is non-zero for rejected invoices; the report is the source of truth.
         run([JAVA, "-jar", str(KOSIT_DIR / "validator.jar"),
              "-s", str(KOSIT_DIR / "config" / "scenarios.xml"), "-r", str(KOSIT_DIR / "config"),
@@ -49,7 +74,7 @@ def validate(data: bytes, timeout: float = 120) -> dict:
         report = Path(tmp, "invoice-report.xml")
         if not report.is_file():
             raise ToolError("KoSIT produced no report")
-        return {"source": source, **_summarize(report.read_bytes())}
+        return report.read_bytes()
 
 
 def _summarize(report_xml: bytes) -> dict:
