@@ -20,6 +20,8 @@ def main() -> None:
     rk = sub.add_parser("revoke-key", help="revoke an API key by its visible prefix (df_<prefix>_...)")
     rk.add_argument("--prefix", required=True)
     sub.add_parser("ensure-bucket", help="create the S3 bucket if STORAGE_BACKEND=s3 (no-op for local)")
+    tr = sub.add_parser("trace", help="find the API key behind a leaked PDF (reads its trace id)")
+    tr.add_argument("pdf", help="path to the PDF")
     ev = sub.add_parser("eval-extract", help="measure extraction accuracy on synthetic invoices")
     ev.add_argument("--cases", type=int, default=50)
     ev.add_argument("--seed", type=int, default=7)
@@ -56,6 +58,15 @@ def main() -> None:
 
     db.pool.open()
     try:
+        if args.cmd == "trace":
+            from pathlib import Path
+
+            from docforge.auth import trace
+            from docforge.core import watermark
+
+            trace_id = watermark.read(Path(args.pdf).read_bytes())
+            print(json.dumps({"trace_id": trace_id, "usage": trace(trace_id) if trace_id else None}, default=str, indent=2))
+            return
         if args.cmd == "revoke-key":
             print("revoked" if revoke_key(args.prefix) else "no active key with that prefix")
             return
