@@ -3,12 +3,15 @@ import json
 import logging
 import os
 import queue
+import select
+import struct
 import subprocess
 import sys
 import threading
+import time
 from concurrent.futures import Future
 
-from docforge.core.tools import ToolError, run
+from docforge.core.tools import ToolError
 
 log = logging.getLogger(__name__)
 
@@ -29,15 +32,92 @@ def render(engine: str, source: str, data: dict, pdfa: bool = False, timeout: fl
 
 def _typst(source: str, data: dict, pdfa: bool, timeout: float) -> bytes:
     payload = json.dumps({"source": source, "data": data, "pdfa": pdfa}).encode()
-    try:
-        return run([sys.executable, "-m", "docforge.core.typst_worker"], timeout=timeout, stdin=payload).stdout
-    except ToolError as e:
-        cause = e.__cause__
-        if isinstance(cause, subprocess.TimeoutExpired):
-            raise TemplateError(f"template took longer than {timeout:g}s") from e
-        if "exited 2:" in str(e):
-            raise TemplateError(str(e).split("exited 2:", 1)[1].strip()) from e
-        raise
+    status, body = typst_pool.compile(payload, timeout)
+    if status == 0:
+        return body
+    raise TemplateError(body.decode(errors="replace"))
+
+
+class _TypstProcess:
+    """One warm compiler process. Killed and restarted on timeout, crash, or after MAX_RENDERS."""
+
+    MAX_RENDERS = 200
+
+    def __init__(self) -> None:
+        self.proc: subprocess.Popen[bytes] | None = None
+        self.renders = 0
+
+    def pid(self) -> int | None:
+        return self.proc.pid if self.proc is not None and self.proc.poll() is None else None
+
+    def _start(self) -> subprocess.Popen[bytes]:
+        self.kill()
+        self.proc = subprocess.Popen(
+            [sys.executable, "-m", "docforge.core.typst_worker"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        )
+        self.renders = 0
+        return self.proc
+
+    def kill(self) -> None:
+        if self.proc is not None and self.proc.poll() is None:
+            self.proc.kill()
+            self.proc.wait(timeout=5)
+        self.proc = None
+
+    def compile(self, payload: bytes, timeout: float) -> tuple[int, bytes]:
+        proc = self.proc
+        if proc is None or proc.poll() is not None or self.renders >= self.MAX_RENDERS:
+            proc = self._start()
+        assert proc.stdin is not None and proc.stdout is not None
+        deadline = time.monotonic() + timeout
+        try:
+            proc.stdin.write(struct.pack(">I", len(payload)) + payload)
+            proc.stdin.flush()
+            status, length = struct.unpack(">BI", self._read(proc.stdout, 5, deadline))
+            body = self._read(proc.stdout, length, deadline)
+        except TimeoutError:
+            self.kill()
+            raise TemplateError(f"template took longer than {timeout:g}s") from None
+        except (BrokenPipeError, EOFError, OSError) as e:
+            self.kill()
+            raise ToolError(f"typst worker died: {e}") from e
+        self.renders += 1
+        return status, body
+
+    @staticmethod
+    def _read(stream, n: int, deadline: float) -> bytes:
+        fd = stream.fileno()
+        buf = b""
+        while len(buf) < n:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or not select.select([fd], [], [], remaining)[0]:
+                raise TimeoutError
+            chunk = os.read(fd, n - len(buf))
+            if not chunk:
+                raise EOFError("worker closed its output")
+            buf += chunk
+        return buf
+
+
+class _TypstPool:
+    def __init__(self, size: int) -> None:
+        self.size = max(1, size)
+        self._free: queue.Queue[_TypstProcess] = queue.Queue()
+        self.processes = [_TypstProcess() for _ in range(self.size)]
+        for p in self.processes:
+            self._free.put(p)
+
+    def compile(self, payload: bytes, timeout: float) -> tuple[int, bytes]:
+        proc = self._free.get()
+        try:
+            return proc.compile(payload, timeout)
+        finally:
+            self._free.put(proc)
+
+    def shutdown(self) -> None:
+        for p in self.processes:
+            p.kill()
 
 
 def _html(source: str, data: dict, timeout: float) -> bytes:
@@ -154,3 +234,5 @@ class _Chromium:
 
 chromium = _Chromium(int(os.environ.get("RENDER_WORKERS", "2")))
 atexit.register(chromium.shutdown)
+typst_pool = _TypstPool(int(os.environ.get("TYPST_WORKERS", "2")))
+atexit.register(typst_pool.shutdown)
