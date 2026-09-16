@@ -112,7 +112,8 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 _opener = urllib.request.build_opener(_NoRedirect)
 
 
-@jobs.handler("webhooks", "deliver")
+# Receivers go down for deploys: 8 attempts back off from 30s to about 1h, roughly 2 hours in total.
+@jobs.handler("webhooks", "deliver", max_attempts=8)
 def deliver_event(job: dict) -> dict:
     params = job["params"]
     with connect() as conn:

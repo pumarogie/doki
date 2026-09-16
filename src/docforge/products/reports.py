@@ -176,7 +176,8 @@ def enqueue_due(limit: int = 100) -> int:
                 "INSERT INTO job (api_key_id, product, operation, params) VALUES (%s, 'reports', 'run_schedule', %s)",
                 (s["api_key_id"], Jsonb({"schedule_id": s["id"]})),
             )
-            # Missed runs are skipped rather than replayed: next run is computed from now.
+            # Runs missed while the worker was down collapse into this one catch-up run;
+            # the next run is computed from now, so a long outage never floods the recipient.
             conn.execute("UPDATE schedule SET next_run_at = %s WHERE id = %s",
                          (next_run(s["cron"], s["timezone"]), s["id"]))
     return len(due)

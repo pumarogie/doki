@@ -154,3 +154,39 @@ def test_endpoints_are_isolated_and_deletable(client, key_for, receiver):
 def test_sign_matches_documented_format():
     sig = webhooks.sign("whsec_x", 1700000000, b'{"a":1}')
     assert sig == "t=1700000000,v1=" + hmac.new(b"whsec_x", b'1700000000.{"a":1}', hashlib.sha256).hexdigest()
+
+
+def test_webhooks_get_a_longer_retry_budget(client, key_for, receiver):
+    client.post("/v1/webhooks", headers=key_for("render"), json={"url": receiver.url})
+    receiver.status = 503
+    jobs.enqueue(_key_id(), "test", "ok", {})
+    _run_all()
+    with connect() as conn:
+        delivery_id = one(conn, "SELECT id FROM job WHERE product = 'webhooks' ORDER BY id DESC LIMIT 1")["id"]
+    for _ in range(10):
+        with connect() as conn:
+            conn.execute("UPDATE job SET run_after = now() WHERE id = %s", (delivery_id,))
+        _run_all()
+    with connect() as conn:
+        final = one(conn, "SELECT status, attempts, run_after FROM job WHERE id = %s", (delivery_id,))
+    assert final["status"] == "failed" and final["attempts"] == 8
+    assert len(receiver.requests) == 8
+
+
+@jobs.handler("test", "patient", max_attempts=20)
+def _patient(job):
+    raise ConnectionError("still down")
+
+
+def test_retry_backoff_is_capped_at_an_hour(key_for):
+    from docforge.core.jobs import fail
+
+    key_for("render")
+    job_id = jobs.enqueue(_key_id(), "test", "patient", {})
+    with connect() as conn:
+        conn.execute("UPDATE job SET attempts = 10 WHERE id = %s", (job_id,))  # uncapped: 30s * 2^9 = 4h16m
+    fail({"id": job_id, "attempts": 10, "product": "test", "operation": "patient"}, "x", permanent=False)
+    with connect() as conn:
+        row = one(conn, "SELECT status, extract(epoch FROM run_after - now())::int AS s FROM job WHERE id = %s", (job_id,))
+        conn.execute("DELETE FROM job WHERE id = %s", (job_id,))
+    assert row["status"] == "queued" and 3500 <= row["s"] <= 3600

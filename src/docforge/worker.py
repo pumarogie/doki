@@ -9,7 +9,6 @@ from docforge import (
     observability,
     webhooks,  # noqa: F401  (registers job handlers)
 )
-from docforge.auth import prune_rate_windows
 from docforge.core import jobs, retention
 from docforge.products import extract, reports  # noqa: F401  (registers job handlers)
 
@@ -40,7 +39,6 @@ def main(poll_seconds: float = 1.0, schedule_every: float = 20.0, purge_every: f
             if time.monotonic() - last_schedule_check >= schedule_every:
                 if queued := reports.enqueue_due():
                     log.info("queued %d scheduled report(s)", queued)
-                prune_rate_windows()
                 last_schedule_check = time.monotonic()
             if time.monotonic() - last_purge >= purge_every:
                 retention.purge()
