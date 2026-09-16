@@ -18,6 +18,13 @@ docforge create-key --org acme --products pdfa,render --rate-per-minute 120 --mo
 docforge revoke-key --prefix <prefix>        # the part after df_ in the key
 ```
 
+## Webhooks
+
+`POST /v1/webhooks {"url": "https://…"}` returns a `whsec_…` secret once. Every finished job sends
+`job.succeeded` / `job.failed` as JSON with `Docforge-Signature: t=<ts>,v1=<hmac>`, where
+`hmac = HMAC-SHA256(secret, "<ts>." + raw_body)`. Verify it and reject old timestamps.
+5xx/timeouts are retried; 4xx is final; redirects are never followed.
+
 ## Run with Docker
 
 ```sh
