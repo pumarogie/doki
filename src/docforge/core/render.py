@@ -1,6 +1,7 @@
 import atexit
 import json
 import logging
+import os
 import queue
 import subprocess
 import sys
@@ -50,36 +51,19 @@ def _html(source: str, data: dict, timeout: float) -> bytes:
     return chromium.render(html, timeout)
 
 
-class _Chromium:
-    """One long-lived headless Chromium per process, driven from a dedicated thread.
+class _BrowserWorker:
+    """One thread owning one headless Chromium. Playwright's sync API is bound to its creating thread."""
 
-    Playwright's sync API is bound to the thread that created it, so all browser work is
-    funnelled through a queue. One render at a time per process; add contexts in parallel
-    when render throughput becomes the bottleneck.
-    """
-
-    def __init__(self) -> None:
-        self._queue: queue.Queue[tuple[str, float, Future[bytes]] | None] = queue.Queue()
-        self._thread: threading.Thread | None = None
-        self._lock = threading.Lock()
+    def __init__(self, jobs: "queue.Queue[tuple[str, float, Future[bytes]] | None]", name: str) -> None:
+        self._jobs = jobs
         self._browser = None
         self._playwright = None
-
-    def render(self, html: str, timeout: float) -> bytes:
-        self._ensure_thread()
-        fut: Future[bytes] = Future()
-        self._queue.put((html, timeout, fut))
-        return fut.result(timeout=timeout + 30)
+        self.served = 0
+        self.thread = threading.Thread(target=self._loop, name=name, daemon=True)
+        self.thread.start()
 
     def browser_id(self) -> int | None:
-        """Identity of the live browser object; changes only when the browser is relaunched."""
         return None if self._browser is None else id(self._browser)
-
-    def _ensure_thread(self) -> None:
-        with self._lock:
-            if self._thread is None or not self._thread.is_alive():
-                self._thread = threading.Thread(target=self._loop, name="chromium-render", daemon=True)
-                self._thread.start()
 
     def _launch(self):
         from playwright.sync_api import sync_playwright
@@ -106,7 +90,7 @@ class _Chromium:
         from playwright.sync_api import Error as PlaywrightError
 
         while True:
-            item = self._queue.get()
+            item = self._jobs.get()
             if item is None:
                 break
             html, timeout, fut = item
@@ -120,8 +104,11 @@ class _Chromium:
                         fut.set_result(self._render_once(html, timeout))
                     except PlaywrightError as e:
                         fut.set_exception(ToolError(f"chromium failed: {e}"))
-            except Exception as e:  # noqa: BLE001  the render thread must never die silently
+            except Exception as e:  # noqa: BLE001  a worker thread must never die silently
                 fut.set_exception(ToolError(f"render thread error: {e}"))
+            finally:
+                self.served += 1
+        self._close_browser()
 
     def _close_browser(self) -> None:
         from playwright.sync_api import Error as PlaywrightError
@@ -133,11 +120,37 @@ class _Chromium:
                 log.info("browser already gone during close")
             self._browser = None
 
+
+class _Chromium:
+    """A small pool of long-lived headless browsers fed from one queue. Started on first use."""
+
+    def __init__(self, size: int) -> None:
+        self.size = max(1, size)
+        self._jobs: queue.Queue[tuple[str, float, Future[bytes]] | None] = queue.Queue()
+        self._lock = threading.Lock()
+        self.workers: list[_BrowserWorker] = []
+
+    def render(self, html: str, timeout: float) -> bytes:
+        self._ensure_started()
+        fut: Future[bytes] = Future()
+        self._jobs.put((html, timeout, fut))
+        return fut.result(timeout=timeout + 30)
+
+    def browser_ids(self) -> set[int]:
+        return {i for w in self.workers if (i := w.browser_id()) is not None}
+
+    def _ensure_started(self) -> None:
+        with self._lock:
+            self.workers = [w for w in self.workers if w.thread.is_alive()]
+            while len(self.workers) < self.size:
+                self.workers.append(_BrowserWorker(self._jobs, f"chromium-{len(self.workers)}"))
+
     def shutdown(self) -> None:
-        if self._thread is not None and self._thread.is_alive():
-            self._queue.put(None)
-            self._thread.join(timeout=10)
+        for _ in self.workers:
+            self._jobs.put(None)
+        for w in self.workers:
+            w.thread.join(timeout=10)
 
 
-chromium = _Chromium()
+chromium = _Chromium(int(os.environ.get("RENDER_WORKERS", "2")))
 atexit.register(chromium.shutdown)

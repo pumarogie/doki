@@ -105,13 +105,14 @@ def test_html_renders_reuse_one_browser(client, key_for):
 
     headers = key_for("render")
     client.post("/v1/render", headers=headers, json={"engine": "html", "source": "<p>warm-up</p>"})
-    first = chromium.browser_id()
+    first = chromium.browser_ids()
     started = time.monotonic()
     for i in range(5):
         r = client.post("/v1/render", headers=headers, json={"engine": "html", "source": f"<p>{i}</p>"})
         assert r.status_code == 200
     assert time.monotonic() - started < 3
-    assert chromium.browser_id() == first
+    assert first <= chromium.browser_ids()  # nothing was relaunched
+    assert len(chromium.browser_ids()) <= chromium.size
 
 
 def test_html_render_survives_browser_crash(client, key_for):
@@ -121,9 +122,24 @@ def test_html_render_survives_browser_crash(client, key_for):
 
     headers = key_for("render")
     assert client.post("/v1/render", headers=headers, json={"engine": "html", "source": "<p>a</p>"}).status_code == 200
-    before = chromium.browser_id()
+    before = chromium.browser_ids()
     killed = subprocess.run(["pkill", "-f", "headless[_-]shell"], check=False).returncode == 0
     assert killed, "no chromium process found to kill"
     r = client.post("/v1/render", headers=headers, json={"engine": "html", "source": "<p>b</p>"})
     assert r.status_code == 200 and r.content.startswith(b"%PDF-")
-    assert chromium.browser_id() != before
+    assert chromium.browser_ids() != before  # the worker that served relaunched its browser
+
+
+def test_pool_renders_in_parallel():
+    from concurrent.futures import ThreadPoolExecutor
+
+    from docforge.core import render as engine
+
+    heavy = "<table>" + "".join(f"<tr><td>{i}</td><td>{'x' * 50}</td></tr>" for i in range(3000)) + "</table>"
+    before = sum(w.served for w in engine.chromium.workers)
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        pdfs = list(pool.map(lambda _: engine.render("html", heavy, {}), range(6)))
+    assert all(p.startswith(b"%PDF-") for p in pdfs)
+    served = [w.served for w in engine.chromium.workers]
+    assert sum(served) - before == 6
+    assert engine.chromium.size >= 2 and sum(1 for n in served if n) >= 2
