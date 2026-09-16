@@ -26,9 +26,13 @@ def main() -> None:
     try:
         with db.connect() as conn:
             row = conn.execute("SELECT id FROM organization WHERE name = %s", (args.org,)).fetchone()
-            org_id = row["id"] if row else conn.execute(
-                "INSERT INTO organization (name) VALUES (%s) RETURNING id", (args.org,)
-            ).fetchone()["id"]
+            if row is None:
+                row = conn.execute(
+                    "INSERT INTO organization (name) VALUES (%s) RETURNING id", (args.org,)
+                ).fetchone()
+                if row is None:
+                    raise RuntimeError(f"failed to create organization {args.org!r}")
+            org_id = row["id"]
         print(create_key(org_id, args.products.split(",")))
     finally:
         db.pool.close()

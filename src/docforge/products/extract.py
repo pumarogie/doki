@@ -3,11 +3,11 @@ import logging
 
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
 
-from docforge.auth import Principal, record_usage, require_product
+from docforge.auth import Principal, require_product
 from docforge.core import extract as engine
 from docforge.core import jobs, llm, storage
 from docforge.core.jobs import PermanentError
-from docforge.db import connect
+from docforge.db import connect, one
 from docforge.uploads import page_count, read_pdf
 
 log = logging.getLogger(__name__)
@@ -52,12 +52,11 @@ def _fields(schema: str, fields: str | None) -> dict[str, str]:
         parsed = json.loads(fields or "")
     except json.JSONDecodeError:
         parsed = None
-    valid = (
+    if not (
         isinstance(parsed, dict) and 0 < len(parsed) <= MAX_CUSTOM_FIELDS
         and all(isinstance(k, str) and k.isidentifier() and len(k) <= 64 and isinstance(v, str) and len(v) <= 300
                 for k, v in parsed.items())
-    )
-    if not valid:
+    ):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
                             f"custom schema needs fields as a JSON object of up to {MAX_CUSTOM_FIELDS} identifier: description pairs")
     return parsed
@@ -66,7 +65,7 @@ def _fields(schema: str, fields: str | None) -> dict[str, str]:
 @jobs.handler("extract", "extract")
 def run(job: dict) -> dict:
     with connect() as conn:
-        org_id = conn.execute("SELECT organization_id FROM api_key WHERE id = %s", (job["api_key_id"],)).fetchone()["organization_id"]
+        org_id = one(conn, "SELECT organization_id FROM api_key WHERE id = %s", (job["api_key_id"],))["organization_id"]
     found = storage.get(job["input_file_id"], org_id)
     if found is None:
         raise PermanentError("input file missing")
