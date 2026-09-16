@@ -3,7 +3,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
 
 from docforge.auth import Principal, record_usage, require_product
-from docforge.core import einvoice
+from docforge.core import einvoice, watermark
 from docforge.core.tools import ToolError
 from docforge.uploads import ensure_pdf, page_count, read_pdf, read_upload
 
@@ -37,6 +37,7 @@ async def zugferd(pdf: UploadFile, xml: UploadFile, principal: Principal = Depen
     xml_bytes = await read_upload(xml, magic=b"<")
     try:
         out = await run_in_threadpool(einvoice.make_zugferd, pdf_bytes, xml_bytes)
+        out = await run_in_threadpool(watermark.stamp, out)
     except ValueError:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "invoice XML is not valid CII for ZUGFeRD")
     except ToolError:
