@@ -3,7 +3,12 @@ import os
 import signal
 import time
 
-from docforge import db, logs, observability
+from docforge import (
+    db,
+    logs,
+    observability,
+    webhooks,  # noqa: F401  (registers job handlers)
+)
 from docforge.auth import prune_rate_windows
 from docforge.core import jobs, retention
 from docforge.products import extract, reports  # noqa: F401  (registers job handlers)

@@ -103,12 +103,23 @@ def run_once() -> bool:
     else:
         finish(job["id"], result, output_file_id=result.pop("output_file_id", None))
     finally:
+        if outcome != "retry" and job["product"] != "webhooks":
+            _notify(job, outcome)
         from docforge.observability import JOB_SECONDS, JOBS
 
         JOBS.labels(job["product"], job["operation"], outcome).inc()
         JOB_SECONDS.labels(job["product"], job["operation"]).observe(time.perf_counter() - started)
         logs.request_id.reset(token)
     return True
+
+
+def _notify(job: dict, outcome: str) -> None:
+    from docforge import webhooks
+
+    try:
+        webhooks.emit(job, outcome)
+    except Exception:  # a webhook problem must never break job bookkeeping
+        log.exception("could not queue webhooks for job %s", job["id"])
 
 
 def get(job_id: int, organization_id: int) -> dict | None:
