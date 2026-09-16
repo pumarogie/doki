@@ -1,4 +1,4 @@
-"""Idempotency-Key support for POST requests (Stripe-style).
+"""Idempotency-Key support for POST requests.
 
 The first request with a key runs normally and its response is stored. A retry with the same key and
 the same request replays the stored response without doing (or billing) the work again.
