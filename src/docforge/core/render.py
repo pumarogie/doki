@@ -86,7 +86,8 @@ class _Chromium:
 
         if self._playwright is None:
             self._playwright = sync_playwright().start()
-        self._browser = self._playwright.chromium.launch()
+        # Docker gives /dev/shm only 64 MB; let Chromium use /tmp instead.
+        self._browser = self._playwright.chromium.launch(args=["--disable-dev-shm-usage"])
         return self._browser
 
     def _render_once(self, html: str, timeout: float) -> bytes:
