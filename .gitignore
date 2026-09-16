@@ -7,3 +7,4 @@ data/
 vendor/
 .DS_Store
 .*/
+!.github/
