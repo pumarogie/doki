@@ -1,7 +1,10 @@
 import os
+import tempfile
 
 os.environ.setdefault("DATABASE_URL", "postgresql://docforge_app@localhost/docforge_test")
-OWNER_URL = os.environ.setdefault("TEST_OWNER_DATABASE_URL", "postgresql://docforge_owner@localhost/docforge_test")
+os.environ["LLM_PROVIDER"] = "mock"
+os.environ.setdefault("STORAGE_DIR", tempfile.mkdtemp(prefix="docforge-test-"))
+OWNER_URL =os.environ.setdefault("TEST_OWNER_DATABASE_URL", "postgresql://docforge_owner@localhost/docforge_test")
 
 import psycopg
 import pytest
