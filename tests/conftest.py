@@ -1,6 +1,7 @@
 import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql://localhost/docforge_test")
+os.environ.setdefault("DATABASE_URL", "postgresql://docforge_app@localhost/docforge_test")
+OWNER_URL = os.environ.setdefault("TEST_OWNER_DATABASE_URL", "postgresql://docforge_owner@localhost/docforge_test")
 
 import psycopg
 import pytest
@@ -13,8 +14,9 @@ from docforge.main import app
 
 @pytest.fixture(scope="session", autouse=True)
 def fresh_schema():
-    with psycopg.connect(os.environ["DATABASE_URL"], autocommit=True) as conn:
-        conn.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public")
+    with psycopg.connect(OWNER_URL, autocommit=True) as conn:
+        conn.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT USAGE ON SCHEMA public TO docforge_app")
+    db.migrate(OWNER_URL)
     yield
 
 
