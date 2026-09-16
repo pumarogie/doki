@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 
 from docforge import db
@@ -18,7 +19,20 @@ def main() -> None:
     ck.add_argument("--monthly-pages", type=int, default=None, help="page quota per calendar month (default: unlimited)")
     rk = sub.add_parser("revoke-key", help="revoke an API key by its visible prefix (df_<prefix>_...)")
     rk.add_argument("--prefix", required=True)
+    ev = sub.add_parser("eval-extract", help="measure extraction accuracy on synthetic invoices")
+    ev.add_argument("--cases", type=int, default=50)
+    ev.add_argument("--seed", type=int, default=7)
+    ev.add_argument("--min-accuracy", type=float, default=None, help="exit 1 if accuracy is below this")
     args = parser.parse_args()
+
+    if args.cmd == "eval-extract":
+        from docforge import evaluation
+
+        report = evaluation.run(args.cases, args.seed)
+        print(json.dumps(report, indent=2))
+        if args.min_accuracy is not None and report["accuracy"] < args.min_accuracy:
+            raise SystemExit(f"accuracy {report['accuracy']} < {args.min_accuracy}")
+        return
 
     if args.cmd == "migrate":
         if not args.url:
