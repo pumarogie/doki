@@ -1,6 +1,6 @@
 # veraPDF ships as platform-independent jars plus a shell launcher; copy them from the official image.
 # 1.30.2
-FROM --platform=linux/amd64 verapdf/cli@sha256:d5ee329657cf9bc4b2400392dd54c7d0a0ce9980ff6fa2da5590eebeec007cdb AS verapdf
+FROM --platform=linux/amd64 verapdf/cli@sha256:d565095c67a083e693aebf7d1a15784007370571053fc1aa5b502665b9a78f9c AS verapdf
 
 FROM python:3.13-slim-bookworm AS runtime
 ENV PYTHONUNBUFFERED=1 \
